@@ -1,0 +1,16 @@
+tkscrolledframe
+
+Pillow
+
+numpy
+
+matplotlib
+
+pandas
+
+scikit-learn
+
+gpflow
+
+
+antes criar ambiente virtual
