@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GP Training App</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+</head>
+<body>
+
+    <!-- Menu Bar -->
+    <div class="menu-bar">
+        <div class="menu-item">
+            File
+            <div class="dropdown-menu">
+                <div class="dropdown-item" onclick="alert('Load project session feature available via JSON export/import.')">Load</div>
+                <div class="dropdown-item" onclick="alert('Session auto-saved.')">Save</div>
+                <div class="dropdown-item" onclick="alert('Session auto-saved.')">Save as</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Tools
+            <div class="dropdown-menu">
+                <div class="dropdown-item" onclick="openModal('modalPlot')">Plot</div>
+                <div class="dropdown-item" onclick="openModal('modalPred')">Predict Y</div>
+                <div class="dropdown-item" onclick="openModal('modalALBO')">AL and BO</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            Help
+            <div class="dropdown-menu">
+                <div class="dropdown-item" onclick="alert('GP Training App - Web Edition v1.0')">About</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        <!-- Left Column -->
+        <div class="left-column">
+            <!-- Training Points Frame -->
+            <div class="tk-frame" style="height: 170px;">
+                <div class="frame-title" style="margin-bottom: 2px;">Training Points</div>
+                <table class="points-table">
+                    <thead>
+                        <tr>
+                            <th>X</th>
+                            <th>Y</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><input type="number" step="any" class="manual-x" value="1.0"></td>
+                            <td><input type="number" step="any" class="manual-y" value="2.0"></td>
+                        </tr>
+                        <tr>
+                            <td><input type="number" step="any" class="manual-x" value="2.0"></td>
+                            <td><input type="number" step="any" class="manual-y" value="3.5"></td>
+                        </tr>
+                        <tr>
+                            <td><input type="number" step="any" class="manual-x" value="3.0"></td>
+                            <td><input type="number" step="any" class="manual-y" value="3.0"></td>
+                        </tr>
+                        <tr>
+                            <td><input type="number" step="any" class="manual-x" value="4.0"></td>
+                            <td><input type="number" step="any" class="manual-y" value="5.0"></td>
+                        </tr>
+                        <tr>
+                            <td><input type="number" step="any" class="manual-x" value="5.0"></td>
+                            <td><input type="number" step="any" class="manual-y" value="6.2"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Import Frame -->
+            <div class="tk-frame import-frame" style="height: 50px;">
+                <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleFileUpload(event)">
+                <button onclick="document.getElementById('csvFileInput').click()">Import CSV File</button>
+            </div>
+
+            <!-- Kernel & Normalization Frame -->
+            <div class="tk-frame" style="height: 160px;">
+                <div class="form-row">
+                    <label for="selKernel">Kernel :</label>
+                    <select id="selKernel">
+                        <option value="RBF" selected>RBF</option>
+                        <option value="Matern 12">Matern 12</option>
+                        <option value="Matern 32">Matern 32</option>
+                        <option value="Matern 52">Matern 52</option>
+                        <option value="Periodic">Periodic</option>
+                        <option value="RQ">RQ</option>
+                    </select>
+                </div>
+                <div class="checkbox-row">
+                    <label class="checkbox-label"><input type="checkbox" id="chkLikelihood"> Likelihood</label>
+                    <label class="checkbox-label"><input type="checkbox" id="chkWhiteKernel"> White Kernel</label>
+                </div>
+                <div style="font-size: 13px; margin: 4px 0 2px 0;">Normalization :</div>
+                <div class="form-row" style="padding-left: 10px;">
+                    <label for="selNormLabel">-Label :</label>
+                    <select id="selNormLabel">
+                        <option value="None" selected>None</option>
+                        <option value="Standardization">Standardization</option>
+                        <option value="LogStand">LogStand</option>
+                        <option value="Log + bStand">Log + bStand</option>
+                        <option value="MinMax">MinMax</option>
+                    </select>
+                </div>
+                <div class="form-row" style="padding-left: 10px;">
+                    <label for="selNormFeat">-Features :</label>
+                    <select id="selNormFeat">
+                        <option value="None" selected>None</option>
+                        <option value="Standardization">Standardization</option>
+                        <option value="LogStand">LogStand</option>
+                        <option value="Log + bStand">Log + bStand</option>
+                        <option value="MinMax">MinMax</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Split Frame -->
+            <div class="tk-frame split-frame" style="height: 80px;">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="chkSplit" onchange="toggleSplitInput()"> Split
+                </label>
+                <div class="form-row">
+                    <label for="txtTestSplit">Test percentage :</label>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="number" id="txtTestSplit" value="20" style="width: 50px;" disabled> %
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="right-column">
+            <!-- Parity Plot Frame -->
+            <div class="tk-frame parity-frame">
+                <div id="parityPlotDiv" class="plot-area"></div>
+                <div class="parity-options">
+                    <div style="font-size: 13px;">Options :</div>
+                    <div class="parity-checkboxes">
+                        <label class="checkbox-label"><input type="checkbox" id="chkMAE" onchange="updateParityPlot()"> MAE</label>
+                        <label class="checkbox-label"><input type="checkbox" id="chkMAPE" onchange="updateParityPlot()"> MAPE</label>
+                        <label class="checkbox-label"><input type="checkbox" id="chkR2" onchange="updateParityPlot()"> R²</label>
+                        <label class="checkbox-label"><input type="checkbox" id="chkRMSE" onchange="updateParityPlot()"> RMSE</label>
+                        <label class="checkbox-label"><input type="checkbox" id="chkErrorBars" onchange="updateParityPlot()"> Error Bars</label>
+                    </div>
+                    <button onclick="updateParityPlot()">Plot Parity</button>
+                </div>
+            </div>
+
+            <!-- Bottom Row -->
+            <div class="bottom-row">
+                <!-- Train Buttons Frame -->
+                <div class="tk-frame train-buttons-frame">
+                    <button id="btnTrainModel" onclick="trainModel()">Train Model</button>
+                    <button onclick="configReset()">Config. Reset</button>
+                    <button onclick="globalReset()">Global Reset</button>
+                </div>
+
+                <!-- Info Frame -->
+                <div class="tk-frame info-frame">
+                    <div class="frame-title">Model details</div>
+                    <div class="info-row">
+                        <span>Nº of Dimensions :</span>
+                        <span id="lblDimensions">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Nº of Training points :</span>
+                        <span id="lblTrainPoints">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Nº of Testing points :</span>
+                        <span id="lblTestPoints">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Nº of Hyperparameters :</span>
+                        <span id="lblHyperparams">---</span>
+                    </div>
+                </div>
+
+                <!-- Icon Frame -->
+                <div class="tk-frame icon-frame">
+                    <img src="/static/MACACO_DO_GP.png" alt="GP Icon" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\'><rect width=\'100\' height=\'100\' fill=\'%23333\'/><text x=\'20\' y=\'55\' fill=\'%23fff\'>GP LOGO</text></svg>'">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 1: GP PLOT -->
+    <div class="modal-overlay" id="modalPlot">
+        <div class="modal-window" style="width: 800px; height: 440px;">
+            <div class="modal-header">
+                <span>GP Plot</span>
+                <span class="modal-close" onclick="closeModal('modalPlot')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="gpPlotDiv" style="width: 480px; height: 370px;" class="plot-area"></div>
+                <div class="tk-frame" style="width: 280px; height: 370px; display: flex; flex-direction: column; gap: 8px;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="chkPlotStandard" checked> Standard Plot
+                    </label>
+                    <div class="form-row">
+                        <label>Nº of Plot Points :</label>
+                        <select id="selPlotPoints">
+                            <option value="100">100</option>
+                            <option value="500">500</option>
+                            <option value="1000" selected>1000</option>
+                            <option value="2000">2000</option>
+                            <option value="5000">5000</option>
+                            <option value="10000">10000</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>3D Graph Style :</label>
+                        <select id="selPlotCmap">
+                            <option value="Viridis" selected>Viridis</option>
+                            <option value="Plasma">Plasma</option>
+                            <option value="Inferno">Inferno</option>
+                            <option value="Jet">Jet</option>
+                            <option value="Rainbow">Rainbow</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>2D Model color :</label>
+                        <select id="selModelColor">
+                            <option value="black" selected>black</option>
+                            <option value="red">red</option>
+                            <option value="blue">blue</option>
+                            <option value="purple">purple</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>2D IC color :</label>
+                        <select id="selICColor">
+                            <option value="blue" selected>blue</option>
+                            <option value="gray">gray</option>
+                            <option value="lightblue">lightblue</option>
+                        </select>
+                    </div>
+                    <div style="font-size: 12px; margin-top: 5px;">Custom Ranges (if Standard unchecked):</div>
+                    <div class="form-row">
+                        <span>Var 1 (Min / Max):</span>
+                        <div style="display: flex; gap: 4px;">
+                            <input type="number" id="txtVar1Min" style="width: 50px;" placeholder="Min">
+                            <input type="number" id="txtVar1Max" style="width: 50px;" placeholder="Max">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <span>Var 2 (Min / Max):</span>
+                        <div style="display: flex; gap: 4px;">
+                            <input type="number" id="txtVar2Min" style="width: 50px;" placeholder="Min">
+                            <input type="number" id="txtVar2Max" style="width: 50px;" placeholder="Max">
+                        </div>
+                    </div>
+                    <button style="margin-top: auto;" onclick="renderGPPlot()">Plot Graph</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: PREDICT Y -->
+    <div class="modal-overlay" id="modalPred">
+        <div class="modal-window" style="width: 400px; height: 260px;">
+            <div class="modal-header">
+                <span>Predict Y</span>
+                <span class="modal-close" onclick="closeModal('modalPred')">&times;</span>
+            </div>
+            <div class="modal-body" style="flex-direction: column;">
+                <div class="tk-frame" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div id="predInputsContainer" class="form-row">
+                        <span>X value :</span>
+                        <div id="predInputsList" style="display: flex; gap: 5px;">
+                            <input type="number" class="pred-x-val" style="width: 60px;" value="0">
+                        </div>
+                    </div>
+                    <button style="width: 100px;" onclick="runPredictY()">Predict Y</button>
+                    <div class="form-row">
+                        <span id="lblPredYTitle">Pred. Y :</span>
+                        <span id="lblPredYVal" style="font-weight: bold;">---</span>
+                    </div>
+                    <div class="form-row">
+                        <span>C.I. :</span>
+                        <span id="lblCIVal">---</span>
+                    </div>
+                    <div class="form-row">
+                        <span>Confidence :</span>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <input type="number" id="txtCIPercent" value="95" style="width: 50px;"> %
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: AL AND BO -->
+    <div class="modal-overlay" id="modalALBO">
+        <div class="modal-window" style="width: 960px; height: 440px;">
+            <div class="modal-header">
+                <span>AL and BO</span>
+                <span class="modal-close" onclick="closeModal('modalALBO')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="afPlotDiv" style="width: 480px; height: 370px;" class="plot-area"></div>
+                <div style="display: flex; flex-direction: column; gap: 10px; width: 440px;">
+                    <div class="tk-frame" style="height: 175px;">
+                        <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px;">
+                            <span>X Limits</span>
+                            <span>Min / Max</span>
+                            <span>Point to measure :</span>
+                        </div>
+                        <div id="alboLimitsContainer" class="scroll-frame" style="height: 80px;">
+                            <div class="form-row">
+                                <span>Variable 1 :</span>
+                                <input type="number" class="albo-min" style="width: 50px;" placeholder="Min">
+                                <input type="number" class="albo-max" style="width: 50px;" placeholder="Max">
+                                <span class="albo-result" style="font-weight: bold; color: #00ffcc;">---</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                            <label class="checkbox-label"><input type="checkbox" id="chkALBOStandard" checked> Standard Plot</label>
+                            <label class="checkbox-label"><input type="checkbox" id="chkALBOAvailable" checked> Import Available Data</label>
+                            <button onclick="searchALBOPoint()">Search point</button>
+                        </div>
+                    </div>
+                    <div class="tk-frame" style="height: 185px; display: flex; flex-direction: column; gap: 6px;">
+                        <div class="form-row">
+                            <label>Aquisition function :</label>
+                            <select id="selAFType">
+                                <option value="Std" selected>Std</option>
+                                <option value="Std/Mean">Std/Mean</option>
+                                <option value="PI">PI</option>
+                                <option value="EI">EI</option>
+                                <option value="UCB">UCB</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>Nº of Plot Points :</label>
+                            <select id="selALBONPoints">
+                                <option value="100">100</option>
+                                <option value="500">500</option>
+                                <option value="1000" selected>1000</option>
+                                <option value="2000">2000</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>3D Graph Style :</label>
+                            <select id="selALBOCmap">
+                                <option value="Viridis" selected>Viridis</option>
+                                <option value="Plasma">Plasma</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>2D Model color :</label>
+                            <select id="selALBOModelColor">
+                                <option value="black" selected>black</option>
+                                <option value="red">red</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label>2D AF color :</label>
+                            <select id="selALBOAFColor">
+                                <option value="blue" selected>blue</option>
+                                <option value="green">green</option>
+                            </select>
+                        </div>
+                        <button style="margin-top: auto;" onclick="renderAFPlot()">Plot AF</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: CSV VARIABLE SELECTION -->
+    <div class="modal-overlay" id="modalCSVVars">
+        <div class="modal-window" style="width: 280px; height: 320px;">
+            <div class="modal-header">
+                <span>Select desired data</span>
+                <span class="modal-close" onclick="closeModal('modalCSVVars')">&times;</span>
+            </div>
+            <div class="modal-body" style="flex-direction: column; gap: 8px;">
+                <div class="form-row">
+                    <label for="selCSVLabel">Label :</label>
+                    <select id="selCSVLabel" style="width: 150px;"></select>
+                </div>
+                <div style="font-size: 13px; font-weight: bold;">Features :</div>
+                <div id="csvFeaturesList" class="scroll-frame" style="height: 140px;"></div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                    <label class="checkbox-label"><input type="checkbox" id="chkCSVSelectAll" onchange="toggleSelectAllCSVFeatures()"> Select All</label>
+                    <button onclick="confirmCSVVariables()">Confirm variables</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

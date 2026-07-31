@@ -1,0 +1,332 @@
+/* Styles matching exact Tkinter desktop app aesthetic */
+:root {
+    --bg-base-color: #333333;       /* gray20 */
+    --background-color: #1a1a1a;    /* gray10 */
+    --entr-btn-color: #242424;      /* gray14 */
+    --fg-base-color: #ffffff;       /* snow */
+    --border-color: #444444;
+    --accent-blue: #007acc;
+    --train-red: #ff3333;
+    --test-blue: #3399ff;
+    --font-family: 'Calibri', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--fg-base-color);
+    font-family: var(--font-family);
+    font-size: 14px;
+    padding: 10px;
+    user-select: none;
+}
+
+/* Menu Bar */
+.menu-bar {
+    background-color: var(--bg-base-color);
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 10px;
+    padding: 2px 5px;
+}
+
+.menu-item {
+    position: relative;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.menu-item:hover {
+    background-color: var(--entr-btn-color);
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: var(--bg-base-color);
+    border: 1px solid var(--border-color);
+    min-width: 120px;
+    z-index: 100;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+}
+
+.menu-item:hover .dropdown-menu {
+    display: block;
+}
+
+.dropdown-item {
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.dropdown-item:hover {
+    background-color: var(--entr-btn-color);
+}
+
+/* Main Container Layout */
+.app-container {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 210px;
+}
+
+.right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+/* Frames / Panels */
+.tk-frame {
+    background-color: var(--bg-base-color);
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    position: relative;
+    border-radius: 2px;
+}
+
+.frame-title {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+/* Inputs, Buttons & Selects */
+input[type="text"],
+input[type="number"],
+select {
+    background-color: var(--entr-btn-color);
+    color: var(--fg-base-color);
+    border: 1px solid var(--border-color);
+    padding: 3px 6px;
+    font-family: var(--font-family);
+    font-size: 13px;
+    border-radius: 2px;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+    outline: 1px solid var(--accent-blue);
+}
+
+button {
+    background-color: var(--entr-btn-color);
+    color: var(--fg-base-color);
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    font-family: var(--font-family);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+button:hover:not(:disabled) {
+    background-color: #383838;
+}
+
+button:disabled, input:disabled, select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Specific Frame Styles */
+/* Training Points Frame */
+.points-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.points-table th {
+    font-weight: normal;
+    padding-bottom: 4px;
+    font-size: 13px;
+}
+
+.points-table td {
+    padding: 2px;
+}
+
+.points-table input {
+    width: 100%;
+    text-align: center;
+}
+
+/* Import CSV Frame */
+.import-frame {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 50px;
+}
+
+/* Kernel & Normalization Frame */
+.form-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.checkbox-row {
+    display: flex;
+    gap: 15px;
+    margin: 6px 0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+/* Split Frame */
+.split-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Middle Layout - Parity & Bottom Row */
+.parity-frame {
+    width: 100%;
+    height: 380px;
+    display: flex;
+    flex-direction: column;
+}
+
+.plot-area {
+    flex: 1;
+    width: 100%;
+    background-color: #000000;
+    border: 1px solid var(--border-color);
+}
+
+.parity-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding: 0 4px;
+}
+
+.parity-checkboxes {
+    display: flex;
+    gap: 12px;
+}
+
+.bottom-row {
+    display: flex;
+    gap: 10px;
+}
+
+.train-buttons-frame {
+    width: 130px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.train-buttons-frame button {
+    width: 100%;
+}
+
+.info-frame {
+    width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.icon-frame {
+    width: 130px;
+    height: 130px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.icon-frame img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* Modals / Windows */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0,0,0,0.6);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-window {
+    background-color: var(--background-color);
+    border: 3px solid var(--border-color);
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-base-color);
+    padding: 4px 8px;
+    font-weight: bold;
+}
+
+.modal-close {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.modal-body {
+    display: flex;
+    gap: 10px;
+}
+
+/* Custom Scrollable Frame */
+.scroll-frame {
+    max-height: 120px;
+    overflow-y: auto;
+    background-color: var(--bg-base-color);
+    border: 1px solid var(--border-color);
+    padding: 5px;
+}
