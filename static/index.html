@@ -14,9 +14,10 @@
         <div class="menu-item">
             File
             <div class="dropdown-menu">
-                <div class="dropdown-item" onclick="alert('Load project session feature available via JSON export/import.')">Load</div>
-                <div class="dropdown-item" onclick="alert('Session auto-saved.')">Save</div>
-                <div class="dropdown-item" onclick="alert('Session auto-saved.')">Save as</div>
+                <input type="file" id="sessionFileInput" accept=".json" style="display: none;" onchange="handleLoadSession(event)">
+                <div class="dropdown-item" onclick="document.getElementById('sessionFileInput').click()">Load</div>
+                <div class="dropdown-item" onclick="saveSession()">Save</div>
+                <div class="dropdown-item" onclick="saveSession()">Save as</div>
             </div>
         </div>
         <div class="menu-item">

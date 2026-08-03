@@ -4,7 +4,7 @@ Para abrir a aplicação no seu computador:
 
 1. Abra o terminal na pasta do projeto:
    ```bash
-   cd c:\Users\almei\Desktop\projetoA
+   cd caminho\pasta\projetoA
    ```
 
 2. Inicie o servidor FastAPI usando o ambiente virtual (`venv`):

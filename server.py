@@ -666,6 +666,66 @@ async def run_albo(req: ALBORequest):
 
     return result
 
+@app.get("/api/export-session")
+async def export_session():
+    data = {
+        "type_data": SESSION_STATE["type_data"],
+        "train_done": SESSION_STATE["train_done"],
+        "var_kernel": SESSION_STATE["var_kernel"],
+        "var_norm_label": SESSION_STATE["var_norm_label"],
+        "var_norm_feat": SESSION_STATE["var_norm_feat"],
+        "trainlikelihood": SESSION_STATE["trainlikelihood"],
+        "white_kernel": SESSION_STATE["white_kernel"],
+        "Train_Test_Split": SESSION_STATE["Train_Test_Split"],
+        "Split_Percentage": SESSION_STATE["Split_Percentage"],
+        "ncol_data": SESSION_STATE["ncol_data"],
+        "Axes_titles": SESSION_STATE["Axes_titles"],
+        "Graph_title": SESSION_STATE["Graph_title"],
+        "num_params": SESSION_STATE["num_params"],
+        "X": SESSION_STATE["X"].tolist() if SESSION_STATE["X"] is not None else [],
+        "Y": SESSION_STATE["Y"].tolist() if SESSION_STATE["Y"] is not None else [],
+    }
+    return JSONResponse(
+        content=data,
+        headers={"Content-Disposition": "attachment; filename=gp_session.json"}
+    )
+
+@app.post("/api/load-session")
+async def load_session(file: UploadFile = File(...)):
+    contents = await file.read()
+    try:
+        data = json.loads(contents.decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid session file format.")
+
+    X = np.array(data.get("X", []), dtype=np.float64)
+    Y = np.array(data.get("Y", []), dtype=np.float64)
+
+    config = {
+        "kernel": data.get("var_kernel", "RBF"),
+        "norm_label": data.get("var_norm_label", "None"),
+        "norm_feat": data.get("var_norm_feat", "None"),
+        "likelihood": data.get("trainlikelihood", False),
+        "white_kernel": data.get("white_kernel", False),
+        "split": data.get("Train_Test_Split", False),
+        "split_percentage": data.get("Split_Percentage", 20.0)
+    }
+
+    if len(X) > 0 and len(Y) > 0:
+        fit_gp_model(X, Y, config)
+
+    SESSION_STATE["Axes_titles"] = data.get("Axes_titles", ["X", "Y"])
+    SESSION_STATE["Graph_title"] = data.get("Graph_title", "Session Graph")
+    SESSION_STATE["type_data"] = data.get("type_data", "Manual")
+
+    return {
+        "status": "success",
+        "session_data": data,
+        "n_train": int(len(SESSION_STATE["X_Train"])) if SESSION_STATE["X_Train"] is not None else 0,
+        "n_test": int(len(SESSION_STATE["X_Test"])) if SESSION_STATE["X_Test"] is not None else 0,
+        "num_params": SESSION_STATE["num_params"]
+    }
+
 @app.post("/api/global-reset")
 async def global_reset():
     SESSION_STATE.update({

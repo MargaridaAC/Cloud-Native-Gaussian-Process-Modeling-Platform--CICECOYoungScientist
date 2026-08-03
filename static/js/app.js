@@ -603,6 +603,65 @@ async function globalReset() {
     }
 }
 
+// Save Session (Export JSON)
+async function saveSession() {
+    try {
+        const res = await fetch("/api/export-session");
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "gp_session.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        alert("Error saving session: " + err.message);
+    }
+}
+
+// Load Session (Import JSON)
+async function handleLoadSession(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const res = await fetch("/api/load-session", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to load session file");
+
+        const sData = data.session_data;
+        document.getElementById("selKernel").value = sData.var_kernel || "RBF";
+        document.getElementById("selNormLabel").value = sData.var_norm_label || "None";
+        document.getElementById("selNormFeat").value = sData.var_norm_feat || "None";
+        document.getElementById("chkLikelihood").checked = sData.trainlikelihood || false;
+        document.getElementById("chkWhiteKernel").checked = sData.white_kernel || false;
+        document.getElementById("chkSplit").checked = sData.Train_Test_Split || false;
+        document.getElementById("txtTestSplit").value = sData.Split_Percentage || 20;
+        toggleSplitInput();
+
+        updateModelDetails({
+            n_dimensions: sData.ncol_data,
+            n_train: data.n_train,
+            n_test: data.n_test,
+            num_params: data.num_params,
+            axes_titles: sData.Axes_titles
+        });
+
+        await updateParityPlot();
+        alert("Session loaded successfully!");
+    } catch (err) {
+        alert("Error loading session: " + err.message);
+    }
+}
+
 // Initial Setup
 window.addEventListener("DOMContentLoaded", () => {
     updateParityPlot();
