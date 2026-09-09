@@ -157,6 +157,21 @@ button:disabled, input:disabled, select:disabled {
 
 /* Specific Frame Styles */
 /* Training Points Frame */
+.points-table-container {
+    max-height: 148px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.points-table-container::-webkit-scrollbar {
+    width: 5px;
+}
+
+.points-table-container::-webkit-scrollbar-thumb {
+    background-color: #555555;
+    border-radius: 3px;
+}
+
 .points-table {
     width: 100%;
     border-collapse: collapse;
@@ -175,6 +190,7 @@ button:disabled, input:disabled, select:disabled {
 .points-table input {
     width: 100%;
     text-align: center;
+    padding: 2px 4px;
 }
 
 /* Import CSV Frame */
