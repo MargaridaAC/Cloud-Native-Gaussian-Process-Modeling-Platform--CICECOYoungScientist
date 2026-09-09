@@ -31,7 +31,7 @@ SESSION_STATE: Dict[str, Any] = {
     "Y": None,
     "ncol_data": 2,
     "Axes_titles": ["X", "Y"],
-    "Graph_title": "Manual Points Graph",
+    "Graph_title": "Manual Points Graph (for testing purposes)",
     "var_norm_label": "None",
     "var_norm_feat": "None",
     "var_kernel": "RBF",
@@ -41,7 +41,8 @@ SESSION_STATE: Dict[str, Any] = {
     "Split_Percentage": 20.0,
     "num_params": 0,
     "df_full": None,
-    "available_data_search": None
+    "df_available": None,
+    "BO_zone_available": None
 }
 
 # =============================================================================
@@ -69,7 +70,6 @@ def Normalization(inpt, option, parms=None, reverse=False, var={"bol": False, "Y
                 if parms is None:
                     mean = inpt.mean(axis=0)
                     std = inpt.std(axis=0)
-                    # avoid zero division
                     std = np.where(std == 0, 1.0, std)
                     parms = [mean, std]
                 outpt = (inpt - parms[0]) / parms[1]
@@ -159,6 +159,9 @@ class CSVTrainData(BaseModel):
     split: bool = False
     split_percentage: float = 20.0
 
+class AvailableDataConfirm(BaseModel):
+    feature_cols: List[str]
+
 class PredictYRequest(BaseModel):
     x_values: List[float]
     confidence_level: float = 95.0
@@ -176,41 +179,8 @@ class ALBORequest(BaseModel):
     x_ranges: Optional[List[Dict[str, float]]] = None
 
 # =============================================================================
-# API ENDPOINTS
+# HELPER FUNCTIONS
 # =============================================================================
-
-@app.post("/api/upload-csv")
-async def upload_csv(file: UploadFile = File(...)):
-    contents = await file.read()
-    text = contents.decode("utf-8-sig", errors="ignore")
-    lines = text.splitlines()
-
-    comment_lines_idx = []
-    comment_lines_text = []
-    for i, line in enumerate(lines):
-        if line.strip().startswith("#"):
-            comment_lines_idx.append(i)
-            comment_lines_text.append(line.strip())
-        else:
-            break
-
-    graph_title = "Uploaded CSV Data"
-    if comment_lines_text:
-        graph_title = comment_lines_text[0][1:].strip(",")
-
-    df = pd.read_csv(io.StringIO(text), skiprows=comment_lines_idx)
-    columns = df.columns.tolist()
-
-    SESSION_STATE["df_full"] = df
-    SESSION_STATE["Graph_title"] = graph_title
-
-    return {
-        "columns": columns,
-        "comments": comment_lines_text,
-        "graph_title": graph_title,
-        "preview": df.head(10).to_dict(orient="records")
-    }
-
 def fit_gp_model(X, Y, config):
     var_kernel = config["kernel"]
     var_norm_label = config["norm_label"]
@@ -287,6 +257,114 @@ def fit_gp_model(X, Y, config):
 
     return model, parms_X, parms_Y, X_Train, Y_Train, X_Test, Y_Test, num_params
 
+def get_var_bounds():
+    X = SESSION_STATE.get("X")
+    Axes_titles = SESSION_STATE.get("Axes_titles", ["X", "Y"])
+    if X is None or len(X) == 0:
+        return [{"name": "X", "min": 0.0, "max": 10.0}]
+    
+    n_features = X.shape[1]
+    bounds = []
+    for i in range(n_features):
+        name = Axes_titles[i] if i < len(Axes_titles) else f"Variable {i+1}"
+        v_min = float(np.min(X[:, i]))
+        v_max = float(np.max(X[:, i]))
+        bounds.append({"name": name, "min": round(v_min, 4), "max": round(v_max, 4)})
+    return bounds
+
+# =============================================================================
+# API ENDPOINTS
+# =============================================================================
+
+@app.get("/api/model-info")
+async def get_model_info():
+    X = SESSION_STATE.get("X")
+    X_Train = SESSION_STATE.get("X_Train")
+    X_Test = SESSION_STATE.get("X_Test")
+    n_train = len(X_Train) if X_Train is not None else 0
+    n_test = len(X_Test) if X_Test is not None else 0
+    
+    return {
+        "train_done": SESSION_STATE["train_done"],
+        "type_data": SESSION_STATE["type_data"],
+        "ncol_data": SESSION_STATE["ncol_data"],
+        "n_features": max(1, SESSION_STATE["ncol_data"] - 1),
+        "axes_titles": SESSION_STATE["Axes_titles"],
+        "graph_title": SESSION_STATE["Graph_title"],
+        "var_bounds": get_var_bounds(),
+        "num_params": SESSION_STATE["num_params"],
+        "n_train": n_train,
+        "n_test": n_test
+    }
+
+@app.post("/api/upload-csv")
+async def upload_csv(file: UploadFile = File(...)):
+    contents = await file.read()
+    text = contents.decode("utf-8-sig", errors="ignore")
+    lines = text.splitlines()
+
+    comment_lines_idx = []
+    comment_lines_text = []
+    for i, line in enumerate(lines):
+        if line.strip().startswith("#"):
+            comment_lines_idx.append(i)
+            comment_lines_text.append(line.strip())
+        else:
+            break
+
+    graph_title = "Uploaded CSV Data"
+    if comment_lines_text:
+        graph_title = comment_lines_text[0][1:].strip(",")
+
+    df = pd.read_csv(io.StringIO(text), skiprows=comment_lines_idx)
+    columns = df.columns.tolist()
+
+    SESSION_STATE["df_full"] = df
+    SESSION_STATE["Graph_title"] = graph_title
+
+    return {
+        "columns": columns,
+        "comments": comment_lines_text,
+        "graph_title": graph_title,
+        "preview": df.head(10).to_dict(orient="records")
+    }
+
+@app.post("/api/upload-available-data")
+async def upload_available_data(file: UploadFile = File(...)):
+    contents = await file.read()
+    text = contents.decode("utf-8-sig", errors="ignore")
+    lines = text.splitlines()
+
+    comment_lines_idx = [i for i, line in enumerate(lines) if line.strip().startswith("#")]
+    df = pd.read_csv(io.StringIO(text), skiprows=comment_lines_idx)
+    columns = df.columns.tolist()
+
+    SESSION_STATE["df_available"] = df
+
+    return {
+        "columns": columns,
+        "preview": df.head(10).to_dict(orient="records")
+    }
+
+@app.post("/api/confirm-available-data")
+async def confirm_available_data(req: AvailableDataConfirm):
+    df = SESSION_STATE.get("df_available")
+    if df is None:
+        raise HTTPException(status_code=400, detail="No available dataset uploaded yet.")
+
+    selected_cols = [c for c in req.feature_cols if c in df.columns]
+    if len(selected_cols) == 0:
+        raise HTTPException(status_code=400, detail="Select at least 1 feature column for search.")
+
+    BO_zone = df[selected_cols].dropna().values.astype(float)
+    SESSION_STATE["BO_zone_available"] = BO_zone
+
+    return {
+        "status": "success",
+        "num_points": len(BO_zone),
+        "columns": selected_cols
+    }
+
 @app.post("/api/train-manual")
 async def train_manual(req: ManualTrainData):
     x_valid = [x for x, y in zip(req.x_points, req.y_points) if x is not None and y is not None]
@@ -320,7 +398,8 @@ async def train_manual(req: ManualTrainData):
         "n_train": int(len(X_Train)),
         "n_test": int(len(X_Test)),
         "num_params": int(num_params),
-        "axes_titles": ["X", "Y"]
+        "axes_titles": ["X", "Y"],
+        "var_bounds": get_var_bounds()
     }
 
 @app.post("/api/train-csv")
@@ -341,7 +420,7 @@ async def train_csv(req: CSVTrainData):
     df_new = pd.concat([df_feat, df_label], axis=1).dropna()
 
     Col_names = list(df_new.columns)
-    Axes_titles = [n[:10] + "..." if len(n) > 10 else n for n in Col_names]
+    Axes_titles = [n[:12] + "..." if len(n) > 12 else n for n in Col_names]
 
     ncol_data = df_new.shape[1]
     X = df_new.iloc[:, :-1].values.astype(float)
@@ -368,7 +447,8 @@ async def train_csv(req: CSVTrainData):
         "n_train": int(len(X_Train)),
         "n_test": int(len(X_Test)),
         "num_params": int(num_params),
-        "axes_titles": Axes_titles
+        "axes_titles": Axes_titles,
+        "var_bounds": get_var_bounds()
     }
 
 @app.get("/api/parity")
@@ -472,8 +552,8 @@ async def get_plot_graph(req: PlotGraphRequest):
     else:
         if req.var_ranges and len(req.var_ranges) >= n_features:
             for n in range(n_features):
-                v_min = req.var_ranges[n]["min"]
-                v_max = req.var_ranges[n]["max"]
+                v_min = float(req.var_ranges[n]["min"])
+                v_max = float(req.var_ranges[n]["max"])
                 varRange = np.linspace(v_min, v_max, N_Points)
                 X_Plot_base[:, n] = varRange.copy()
         else:
@@ -577,22 +657,20 @@ async def run_albo(req: ALBORequest):
     Graph_title = SESSION_STATE["Graph_title"]
 
     n_features = ncol_data - 1
-    if n_features < 1 or n_features > 2:
-        raise HTTPException(status_code=400, detail="AL/BO search plot supports 1D and 2D features.")
-
+    
     if not req.import_available:
         if req.standard_plot:
             x_min = np.array([np.min(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
             x_max = np.array([np.max(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
         else:
             if req.x_ranges and len(req.x_ranges) >= n_features:
-                x_min = np.array([req.x_ranges[e]["min"] for e in range(n_features)]).reshape(-1, 1)
-                x_max = np.array([req.x_ranges[e]["max"] for e in range(n_features)]).reshape(-1, 1)
+                x_min = np.array([float(req.x_ranges[e]["min"]) for e in range(n_features)]).reshape(-1, 1)
+                x_max = np.array([float(req.x_ranges[e]["max"]) for e in range(n_features)]).reshape(-1, 1)
             else:
                 x_min = np.array([np.min(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
                 x_max = np.array([np.max(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
 
-        N_Points = round(int(req.n_points) ** (1 / n_features))
+        N_Points = round(int(req.n_points) ** (1 / max(1, n_features)))
         BO_zone_base = np.zeros((N_Points, n_features))
 
         for n in range(n_features):
@@ -606,10 +684,13 @@ async def run_albo(req: ALBORequest):
 
         BO_zone_N, _ = Normalization(BO_zone, var_norm_feat, parms=parms_X, reverse=False)
     else:
-        df = SESSION_STATE.get("df_full")
-        if df is None:
+        if SESSION_STATE.get("BO_zone_available") is not None:
+            BO_zone = SESSION_STATE["BO_zone_available"]
+        elif SESSION_STATE.get("df_full") is not None:
+            BO_zone = SESSION_STATE["df_full"].iloc[:, :n_features].values.astype(float)
+        else:
             raise HTTPException(status_code=400, detail="No available dataset uploaded for search zone.")
-        BO_zone = df.iloc[:, :n_features].values.astype(float)
+            
         BO_zone_N, _ = Normalization(BO_zone, var_norm_feat, parms=parms_X, reverse=False)
 
     Y_mean_N, Y_var_N = model.predict_y(BO_zone_N, full_cov=False)
@@ -723,7 +804,8 @@ async def load_session(file: UploadFile = File(...)):
         "session_data": data,
         "n_train": int(len(SESSION_STATE["X_Train"])) if SESSION_STATE["X_Train"] is not None else 0,
         "n_test": int(len(SESSION_STATE["X_Test"])) if SESSION_STATE["X_Test"] is not None else 0,
-        "num_params": SESSION_STATE["num_params"]
+        "num_params": SESSION_STATE["num_params"],
+        "var_bounds": get_var_bounds()
     }
 
 @app.post("/api/global-reset")
@@ -742,7 +824,11 @@ async def global_reset():
         "Y": None,
         "ncol_data": 2,
         "Axes_titles": ["X", "Y"],
-        "num_params": 0
+        "Graph_title": "Manual Points Graph (for testing purposes)",
+        "num_params": 0,
+        "df_full": None,
+        "df_available": None,
+        "BO_zone_available": None
     })
     return {"status": "reset_success"}
 

@@ -1,10 +1,10 @@
-/* Styles matching exact Tkinter desktop app aesthetic */
+/* Styles matching exact Tkinter desktop app aesthetic & fixing layout bugs */
 :root {
     --bg-base-color: #333333;       /* gray20 */
     --background-color: #1a1a1a;    /* gray10 */
     --entr-btn-color: #242424;      /* gray14 */
     --fg-base-color: #ffffff;       /* snow */
-    --border-color: #444444;
+    --border-color: #4a4a4a;
     --accent-blue: #007acc;
     --train-red: #ff3333;
     --test-blue: #3399ff;
@@ -21,25 +21,28 @@ body {
     background-color: var(--background-color);
     color: var(--fg-base-color);
     font-family: var(--font-family);
-    font-size: 14px;
+    font-size: 13px;
     padding: 10px;
     user-select: none;
+    overflow-x: hidden;
 }
 
 /* Menu Bar */
 .menu-bar {
     background-color: var(--bg-base-color);
     display: flex;
-    border-bottom: 1px solid var(--border-color);
+    border: 1px solid var(--border-color);
     margin-bottom: 10px;
     padding: 2px 5px;
+    border-radius: 2px;
 }
 
 .menu-item {
     position: relative;
-    padding: 4px 12px;
+    padding: 4px 14px;
     cursor: pointer;
     font-size: 13px;
+    font-weight: 500;
 }
 
 .menu-item:hover {
@@ -53,9 +56,9 @@ body {
     left: 0;
     background-color: var(--bg-base-color);
     border: 1px solid var(--border-color);
-    min-width: 120px;
-    z-index: 100;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+    min-width: 130px;
+    z-index: 1000;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.6);
 }
 
 .menu-item:hover .dropdown-menu {
@@ -63,18 +66,19 @@ body {
 }
 
 .dropdown-item {
-    padding: 6px 12px;
+    padding: 6px 14px;
     cursor: pointer;
+    font-size: 13px;
 }
 
 .dropdown-item:hover {
     background-color: var(--entr-btn-color);
 }
 
-/* Main Container Layout */
+/* Main Container Layout - Tkinter geometry 720x530 / 1200x800 */
 .app-container {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: flex-start;
 }
 
@@ -82,14 +86,16 @@ body {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 210px;
+    width: 205px;
+    flex-shrink: 0;
 }
 
 .right-column {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    flex: 1;
+    width: 485px;
+    flex-shrink: 0;
 }
 
 /* Frames / Panels */
@@ -104,8 +110,8 @@ body {
 .frame-title {
     text-align: center;
     font-weight: bold;
-    margin-bottom: 8px;
-    font-size: 14px;
+    margin-bottom: 6px;
+    font-size: 13px;
 }
 
 /* Inputs, Buttons & Selects */
@@ -117,7 +123,7 @@ select {
     border: 1px solid var(--border-color);
     padding: 3px 6px;
     font-family: var(--font-family);
-    font-size: 13px;
+    font-size: 12px;
     border-radius: 2px;
 }
 
@@ -125,21 +131,23 @@ input[type="text"]:focus,
 input[type="number"]:focus,
 select:focus {
     outline: 1px solid var(--accent-blue);
+    border-color: var(--accent-blue);
 }
 
 button {
     background-color: var(--entr-btn-color);
     color: var(--fg-base-color);
     border: 1px solid var(--border-color);
-    padding: 4px 8px;
+    padding: 4px 10px;
     font-family: var(--font-family);
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
     border-radius: 2px;
 }
 
 button:hover:not(:disabled) {
     background-color: #383838;
+    border-color: #666666;
 }
 
 button:disabled, input:disabled, select:disabled {
@@ -155,9 +163,9 @@ button:disabled, input:disabled, select:disabled {
 }
 
 .points-table th {
-    font-weight: normal;
+    font-weight: bold;
     padding-bottom: 4px;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .points-table td {
@@ -177,13 +185,17 @@ button:disabled, input:disabled, select:disabled {
     height: 50px;
 }
 
+.import-frame button {
+    width: 160px;
+}
+
 /* Kernel & Normalization Frame */
 .form-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 6px;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .checkbox-row {
@@ -197,7 +209,7 @@ button:disabled, input:disabled, select:disabled {
     align-items: center;
     gap: 5px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 /* Split Frame */
@@ -207,19 +219,29 @@ button:disabled, input:disabled, select:disabled {
     gap: 6px;
 }
 
-/* Middle Layout - Parity & Bottom Row */
+/* Parity Plot Frame - Fixed sizing & shifting prevention */
 .parity-frame {
-    width: 100%;
-    height: 380px;
+    width: 485px;
+    height: 360px;
     display: flex;
     flex-direction: column;
+    padding: 8px;
+}
+
+.plot-container {
+    width: 100%;
+    height: 290px;
+    position: relative;
+    overflow: hidden;
+    background-color: #000000;
+    border: 1px solid var(--border-color);
 }
 
 .plot-area {
-    flex: 1;
     width: 100%;
-    background-color: #000000;
-    border: 1px solid var(--border-color);
+    height: 100%;
+    position: relative;
+    overflow: hidden;
 }
 
 .parity-options {
@@ -227,35 +249,43 @@ button:disabled, input:disabled, select:disabled {
     align-items: center;
     justify-content: space-between;
     margin-top: 6px;
-    padding: 0 4px;
+    padding: 2px 4px;
 }
 
 .parity-checkboxes {
     display: flex;
-    gap: 12px;
+    gap: 14px;
+    align-items: center;
 }
 
+/* Bottom Row */
 .bottom-row {
     display: flex;
     gap: 10px;
+    width: 485px;
 }
 
 .train-buttons-frame {
     width: 130px;
+    height: 130px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    justify-content: space-between;
+    padding: 8px;
 }
 
 .train-buttons-frame button {
     width: 100%;
+    padding: 5px 0;
 }
 
 .info-frame {
-    width: 210px;
+    width: 205px;
+    height: 130px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    justify-content: space-between;
+    padding: 8px;
 }
 
 .info-row {
@@ -271,15 +301,17 @@ button:disabled, input:disabled, select:disabled {
     justify-content: center;
     align-items: center;
     overflow: hidden;
+    padding: 0;
 }
 
 .icon-frame img {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
+    display: block;
 }
 
-/* Modals / Windows */
+/* Modals / Sub-windows */
 .modal-overlay {
     display: none;
     position: fixed;
@@ -287,20 +319,22 @@ button:disabled, input:disabled, select:disabled {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(0,0,0,0.6);
-    z-index: 1000;
+    background-color: rgba(0,0,0,0.65);
+    z-index: 2000;
     justify-content: center;
     align-items: center;
 }
 
 .modal-window {
     background-color: var(--background-color);
-    border: 3px solid var(--border-color);
+    border: 2px solid var(--border-color);
     padding: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.9);
     display: flex;
     flex-direction: column;
     gap: 10px;
+    border-radius: 4px;
+    max-height: 95vh;
 }
 
 .modal-header {
@@ -308,25 +342,112 @@ button:disabled, input:disabled, select:disabled {
     justify-content: space-between;
     align-items: center;
     background-color: var(--bg-base-color);
-    padding: 4px 8px;
+    padding: 6px 10px;
     font-weight: bold;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
 }
 
 .modal-close {
     cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
     font-weight: bold;
+}
+
+.modal-close:hover {
+    color: #ff5555;
 }
 
 .modal-body {
     display: flex;
     gap: 10px;
+    overflow: visible;
 }
 
 /* Custom Scrollable Frame */
 .scroll-frame {
-    max-height: 120px;
     overflow-y: auto;
+    overflow-x: hidden;
     background-color: var(--bg-base-color);
     border: 1px solid var(--border-color);
-    padding: 5px;
+    padding: 6px;
+}
+
+.scroll-frame::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.scroll-frame::-webkit-scrollbar-thumb {
+    background-color: #555555;
+    border-radius: 3px;
+}
+
+/* Dynamic Variable Inputs with Labels on Top */
+.var-column-input {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.var-top-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--fg-base-color);
+    text-align: center;
+    max-width: 85px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pred-inputs-scroll-container {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    max-width: 280px;
+    padding-bottom: 4px;
+}
+
+.pred-inputs-scroll-container::-webkit-scrollbar {
+    height: 5px;
+}
+
+.pred-inputs-scroll-container::-webkit-scrollbar-thumb {
+    background-color: #555555;
+    border-radius: 3px;
+}
+
+/* Limit Entry Row for GP Plot & ALBO */
+.var-limits-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    gap: 8px;
+}
+
+.var-limits-label {
+    width: 90px;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.var-limits-inputs {
+    display: flex;
+    gap: 4px;
+}
+
+.albo-grid-row {
+    display: grid;
+    grid-template-columns: 100px 55px 55px 75px;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+    font-size: 12px;
 }

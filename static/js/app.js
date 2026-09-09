@@ -4,34 +4,54 @@ let currentSession = {
     type_data: "Manual",
     n_dimensions: 2,
     axes_titles: ["X", "Y"],
+    var_bounds: [{ name: "X", min: 0, max: 10 }],
     csv_columns: [],
-    uploaded_csv_preview: null
+    available_data_columns: []
 };
 
 // Dark theme layout configuration for Plotly
 const plotlyDarkLayout = {
-    paper_bgcolor: "#333333",
-    plot_bgcolor: "#1a1a1a",
-    font: { family: "Calibri, sans-serif", color: "#ffffff", size: 12 },
-    margin: { l: 45, r: 25, t: 35, b: 45 },
-    xaxis: { gridcolor: "#333333", zerolinecolor: "#555555" },
-    yaxis: { gridcolor: "#333333", zerolinecolor: "#555555" }
+    autosize: true,
+    paper_bgcolor: "#000000",
+    plot_bgcolor: "#000000",
+    font: { family: "Calibri, Segoe UI, sans-serif", color: "#ffffff", size: 11 },
+    margin: { l: 45, r: 15, t: 30, b: 35, autoexpand: true },
+    xaxis: { gridcolor: "#2a2a2a", zerolinecolor: "#444444" },
+    yaxis: { gridcolor: "#2a2a2a", zerolinecolor: "#444444" }
+};
+
+const plotlyConfig = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToRemove: ['lasso2d', 'select2d']
 };
 
 // Modal Control
 function openModal(id) {
-    document.getElementById(id).style.display = "flex";
-    if (id === 'modalPlot') {
-        renderGPPlot();
-    } else if (id === 'modalALBO') {
-        renderAFPlot();
-    } else if (id === 'modalPred') {
-        setupPredInputs();
-    }
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.style.display = "flex";
+    
+    // Prevent plot shifting: trigger resize after container is visible
+    setTimeout(() => {
+        if (id === 'modalPlot') {
+            const plotDiv = document.getElementById('gpPlotDiv');
+            if (plotDiv) Plotly.Plots.resize(plotDiv);
+            renderGPPlot();
+        } else if (id === 'modalALBO') {
+            const plotDiv = document.getElementById('afPlotDiv');
+            if (plotDiv) Plotly.Plots.resize(plotDiv);
+            renderAFPlot();
+        } else if (id === 'modalPred') {
+            renderPredictInputs();
+        }
+    }, 60);
 }
 
 function closeModal(id) {
-    document.getElementById(id).style.display = "none";
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "none";
 }
 
 // Split Checkbox toggle
@@ -41,7 +61,31 @@ function toggleSplitInput() {
     txt.disabled = !chk.checked;
 }
 
-// Handle CSV Upload
+// Standard plot toggles
+function toggleGPPlotStandard() {
+    const isStd = document.getElementById("chkPlotStandard").checked;
+    document.querySelectorAll(".gp-min, .gp-max").forEach(input => {
+        input.disabled = isStd;
+    });
+}
+
+function toggleALBOStandard() {
+    const isStd = document.getElementById("chkALBOStandard").checked;
+    document.querySelectorAll(".albo-min, .albo-max").forEach(input => {
+        input.disabled = isStd;
+    });
+}
+
+function toggleALBOAvailable() {
+    const isAvail = document.getElementById("chkALBOAvailable").checked;
+    if (isAvail) {
+        document.getElementById("chkALBOStandard").disabled = true;
+    } else {
+        document.getElementById("chkALBOStandard").disabled = false;
+    }
+}
+
+// Handle Main CSV Upload
 async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -62,6 +106,8 @@ async function handleFileUpload(event) {
         openModal("modalCSVVars");
     } catch (err) {
         alert("Error uploading CSV: " + err.message);
+    } finally {
+        event.target.value = "";
     }
 }
 
@@ -95,6 +141,7 @@ function toggleSelectAllCSVFeatures() {
     document.querySelectorAll(".csv-feat-chk").forEach(chk => chk.checked = chkAll);
 }
 
+// Automatic Training & Parity Plot after CSV confirmation
 async function confirmCSVVariables() {
     const labelCol = document.getElementById("selCSVLabel").value;
     const featCols = Array.from(document.querySelectorAll(".csv-feat-chk:checked"))
@@ -111,10 +158,74 @@ async function confirmCSVVariables() {
     await trainModelCSV(labelCol, featCols);
 }
 
-// Train Model (Manual or CSV)
+// Handle Available Data CSV Upload for AL/BO
+async function handleAvailableDataUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const res = await fetch("/api/upload-available-data", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to parse Available Data CSV");
+
+        currentSession.available_data_columns = data.columns;
+        populateAvailableDataModal(data.columns);
+        openModal("modalAvailableVars");
+    } catch (err) {
+        alert("Error uploading Available Data: " + err.message);
+    } finally {
+        event.target.value = "";
+    }
+}
+
+function populateAvailableDataModal(columns) {
+    const list = document.getElementById("availableFeaturesList");
+    list.innerHTML = "";
+
+    columns.forEach(col => {
+        const div = document.createElement("div");
+        div.className = "form-row";
+        div.style.justifyContent = "flex-start";
+        div.style.gap = "8px";
+        div.innerHTML = `<label class="checkbox-label"><input type="checkbox" class="avail-feat-chk" value="${col}" checked> ${col}</label>`;
+        list.appendChild(div);
+    });
+}
+
+async function confirmAvailableDataVariables() {
+    const featCols = Array.from(document.querySelectorAll(".avail-feat-chk:checked")).map(c => c.value);
+    if (featCols.length === 0) {
+        alert("Please select at least 1 feature column.");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/confirm-available-data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ feature_cols: featCols })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to confirm available data");
+
+        closeModal("modalAvailableVars");
+        alert(`Available dataset loaded with ${data.num_points} candidate points.`);
+        await renderAFPlot();
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
+}
+
+// Train Model (Manual)
 async function trainModel() {
     if (currentSession.type_data === "Import") {
-        alert("Currently in CSV mode. Re-import CSV or reset to Manual.");
+        alert("Currently in CSV mode. Re-import CSV or perform Global Reset for Manual mode.");
         return;
     }
 
@@ -152,6 +263,7 @@ async function trainModel() {
     }
 }
 
+// Train Model (CSV)
 async function trainModelCSV(labelCol, featCols) {
     const payload = {
         label_col: labelCol,
@@ -185,15 +297,112 @@ function updateModelDetails(data) {
     currentSession.train_done = true;
     currentSession.n_dimensions = data.n_dimensions;
     currentSession.axes_titles = data.axes_titles;
+    currentSession.var_bounds = data.var_bounds || [];
 
     document.getElementById("lblDimensions").textContent = data.n_dimensions;
     document.getElementById("lblTrainPoints").textContent = data.n_train;
     document.getElementById("lblTestPoints").textContent = data.n_test;
     document.getElementById("lblHyperparams").textContent = data.num_params;
+
+    // Lock options post-train (matching original Tkinter behavior)
+    document.getElementById("selKernel").disabled = true;
+    document.getElementById("selNormLabel").disabled = true;
+    document.getElementById("selNormFeat").disabled = true;
+    document.getElementById("chkLikelihood").disabled = true;
+    document.getElementById("chkWhiteKernel").disabled = true;
+    document.getElementById("chkSplit").disabled = true;
+    document.getElementById("btnTrainModel").disabled = true;
+    document.querySelectorAll(".manual-x, .manual-y").forEach(inp => inp.disabled = true);
+
+    // Update dynamic variable inputs across all modules
+    updateAllVariableInputs();
 }
 
-// Parity Plot Update
+// Update Dynamic Inputs for Predict Y, GP Plot, and ALBO with visible labels on TOP
+function updateAllVariableInputs() {
+    renderPredictInputs();
+    renderGPPlotLimits();
+    renderALBOLimits();
+}
+
+function renderPredictInputs() {
+    const list = document.getElementById("predInputsList");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const nFeat = Math.max(1, currentSession.n_dimensions - 1);
+    const titles = currentSession.axes_titles;
+    const labelTitle = titles[titles.length - 1] || "Y";
+    document.getElementById("lblPredYTitle").textContent = `Pred. ${labelTitle} :`;
+
+    for (let i = 0; i < nFeat; i++) {
+        const vName = titles[i] || `Variable ${i + 1}`;
+        const container = document.createElement("div");
+        container.className = "var-column-input";
+        container.innerHTML = `
+            <div class="var-top-label" title="${vName}">${vName}</div>
+            <input type="number" step="any" class="pred-x-val" style="width: 70px; text-align: center;" value="0">
+        `;
+        list.appendChild(container);
+    }
+}
+
+function renderGPPlotLimits() {
+    const container = document.getElementById("gpPlotLimitsContainer");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const nFeat = Math.max(1, currentSession.n_dimensions - 1);
+    const titles = currentSession.axes_titles;
+    const bounds = currentSession.var_bounds;
+    const isStd = document.getElementById("chkPlotStandard").checked;
+
+    for (let i = 0; i < nFeat; i++) {
+        const vName = titles[i] || `Variable ${i + 1}`;
+        const b = bounds[i] || { min: 0, max: 10 };
+        const row = document.createElement("div");
+        row.className = "var-limits-row";
+        row.innerHTML = `
+            <div class="var-limits-label" title="${vName}">${vName} :</div>
+            <div class="var-limits-inputs">
+                <input type="number" step="any" class="gp-min" style="width: 55px; text-align: center;" value="${b.min}" ${isStd ? 'disabled' : ''}>
+                <input type="number" step="any" class="gp-max" style="width: 55px; text-align: center;" value="${b.max}" ${isStd ? 'disabled' : ''}>
+            </div>
+        `;
+        container.appendChild(row);
+    }
+}
+
+function renderALBOLimits() {
+    const container = document.getElementById("alboLimitsContainer");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const nFeat = Math.max(1, currentSession.n_dimensions - 1);
+    const titles = currentSession.axes_titles;
+    const bounds = currentSession.var_bounds;
+    const isStd = document.getElementById("chkALBOStandard").checked;
+
+    for (let i = 0; i < nFeat; i++) {
+        const vName = titles[i] || `Variable ${i + 1}`;
+        const b = bounds[i] || { min: 0, max: 10 };
+        const row = document.createElement("div");
+        row.className = "albo-grid-row";
+        row.innerHTML = `
+            <span class="var-limits-label" title="${vName}">${vName} :</span>
+            <input type="number" step="any" class="albo-min" style="width: 55px; text-align: center;" value="${b.min}" ${isStd ? 'disabled' : ''}>
+            <input type="number" step="any" class="albo-max" style="width: 55px; text-align: center;" value="${b.max}" ${isStd ? 'disabled' : ''}>
+            <span class="albo-result-val" style="font-weight: bold; color: #00ffcc; text-align: center;">---</span>
+        `;
+        container.appendChild(row);
+    }
+}
+
+// Parity Plot Update - Purely Reactive
 async function updateParityPlot() {
+    const plotDiv = document.getElementById("parityPlotDiv");
+    if (!plotDiv) return;
+
     try {
         const res = await fetch("/api/parity");
         const data = await res.json();
@@ -202,7 +411,7 @@ async function updateParityPlot() {
             Plotly.newPlot("parityPlotDiv", [], {
                 ...plotlyDarkLayout,
                 title: "Parity plot"
-            });
+            }, plotlyConfig);
             return;
         }
 
@@ -215,7 +424,7 @@ async function updateParityPlot() {
             y: data.train.y_pred,
             mode: "markers",
             name: "Train",
-            marker: { color: "red", size: 6, symbol: "circle-open" }
+            marker: { color: "red", size: 6, symbol: "circle-open", line: { width: 1.5 } }
         };
 
         if (document.getElementById("chkErrorBars").checked && data.train.y_std) {
@@ -223,7 +432,7 @@ async function updateParityPlot() {
                 type: "data",
                 array: data.train.y_std,
                 visible: true,
-                color: "black"
+                color: "#ffffff"
             };
         }
         traces.push(trainTrace);
@@ -235,7 +444,7 @@ async function updateParityPlot() {
                 y: data.test.y_pred,
                 mode: "markers",
                 name: "Test",
-                marker: { color: "blue", size: 6, symbol: "x" }
+                marker: { color: "#3399ff", size: 6, symbol: "x" }
             };
 
             if (document.getElementById("chkErrorBars").checked && data.test.y_std) {
@@ -243,7 +452,7 @@ async function updateParityPlot() {
                     type: "data",
                     array: data.test.y_std,
                     visible: true,
-                    color: "black"
+                    color: "#ffffff"
                 };
             }
             traces.push(testTrace);
@@ -254,8 +463,8 @@ async function updateParityPlot() {
             x: [data.line_min, data.line_max],
             y: [data.line_min, data.line_max],
             mode: "lines",
-            name: "Ideal",
-            line: { color: "black", dash: "dash", width: 1 }
+            name: "1:1 Line",
+            line: { color: "#888888", dash: "dash", width: 1 }
         });
 
         // Annotations for metrics
@@ -264,38 +473,38 @@ async function updateParityPlot() {
 
         const m = data.metrics;
         if (document.getElementById("chkMAE").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Train) = ${m.MAE_Train.toFixed(3)}`, showarrow: false, font: { color: "red" } });
-            yPos -= 0.08;
+            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Train) = ${m.MAE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+            yPos -= 0.07;
         }
         if (document.getElementById("chkMAPE").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Train) = ${m.MAPE_Train.toFixed(3)}`, showarrow: false, font: { color: "red" } });
-            yPos -= 0.08;
+            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Train) = ${m.MAPE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+            yPos -= 0.07;
         }
         if (document.getElementById("chkR2").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Train) = ${m.R2_Train.toFixed(3)}`, showarrow: false, font: { color: "red" } });
-            yPos -= 0.08;
+            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Train) = ${m.R2_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+            yPos -= 0.07;
         }
         if (document.getElementById("chkRMSE").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Train) = ${m.RMSE_Train.toFixed(3)}`, showarrow: false, font: { color: "red" } });
-            yPos -= 0.08;
+            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Train) = ${m.RMSE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+            yPos -= 0.07;
         }
 
         if (data.has_test) {
             if (document.getElementById("chkMAE").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Test) = ${m.MAE_Test.toFixed(3)}`, showarrow: false, font: { color: "blue" } });
-                yPos -= 0.08;
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Test) = ${m.MAE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                yPos -= 0.07;
             }
             if (document.getElementById("chkMAPE").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Test) = ${m.MAPE_Test.toFixed(3)}`, showarrow: false, font: { color: "blue" } });
-                yPos -= 0.08;
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Test) = ${m.MAPE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                yPos -= 0.07;
             }
             if (document.getElementById("chkR2").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Test) = ${m.R2_Test.toFixed(3)}`, showarrow: false, font: { color: "blue" } });
-                yPos -= 0.08;
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Test) = ${m.R2_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                yPos -= 0.07;
             }
             if (document.getElementById("chkRMSE").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Test) = ${m.RMSE_Test.toFixed(3)}`, showarrow: false, font: { color: "blue" } });
-                yPos -= 0.08;
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Test) = ${m.RMSE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                yPos -= 0.07;
             }
         }
 
@@ -307,21 +516,32 @@ async function updateParityPlot() {
             annotations: annotations
         };
 
-        Plotly.newPlot("parityPlotDiv", traces, layout);
+        Plotly.newPlot("parityPlotDiv", traces, layout, plotlyConfig);
+        Plotly.Plots.resize("parityPlotDiv");
     } catch (err) {
         console.error("Parity Plot error:", err);
     }
 }
 
-// Render GP Plot (2D or 3D)
+// Render GP Plot (2D Curve or 3D Surface)
 async function renderGPPlot() {
+    const isStd = document.getElementById("chkPlotStandard").checked;
+    const minInputs = document.querySelectorAll(".gp-min");
+    const maxInputs = document.querySelectorAll(".gp-max");
+
+    const varRanges = [];
+    minInputs.forEach((minInp, idx) => {
+        const maxInp = maxInputs[idx];
+        varRanges.push({
+            min: parseFloat(minInp.value) || 0,
+            max: parseFloat(maxInp.value) || 10
+        });
+    });
+
     const payload = {
-        standard_plot: document.getElementById("chkPlotStandard").checked,
+        standard_plot: isStd,
         n_points: parseInt(document.getElementById("selPlotPoints").value) || 1000,
-        var_ranges: [
-            { min: parseFloat(document.getElementById("txtVar1Min").value) || 0, max: parseFloat(document.getElementById("txtVar1Max").value) || 10 },
-            { min: parseFloat(document.getElementById("txtVar2Min").value) || 0, max: parseFloat(document.getElementById("txtVar2Max").value) || 10 }
-        ]
+        var_ranges: varRanges
     };
 
     try {
@@ -333,7 +553,7 @@ async function renderGPPlot() {
         const data = await res.json();
 
         if (!data.train_done) {
-            Plotly.newPlot("gpPlotDiv", [], { ...plotlyDarkLayout, title: "GRAPH" });
+            Plotly.newPlot("gpPlotDiv", [], { ...plotlyDarkLayout, title: "GRAPH" }, plotlyConfig);
             return;
         }
 
@@ -349,16 +569,16 @@ async function renderGPPlot() {
                 y: data.y_mean,
                 mode: "lines",
                 name: "Y mean",
-                line: { color: mColor }
+                line: { color: mColor, width: 2 }
             });
 
-            // 95% Confidence Interval
+            // 95% Confidence Interval band
             traces.push({
                 x: data.x_plot.concat(data.x_plot.slice().reverse()),
                 y: data.y_upper.concat(data.y_lower.slice().reverse()),
                 fill: "toself",
-                fillcolor: "rgba(0, 102, 255, 0.15)",
-                line: { color: icColor, dash: "dash" },
+                fillcolor: "rgba(51, 153, 255, 0.2)",
+                line: { color: icColor, dash: "dash", width: 1 },
                 name: "Y I.C. 95%"
             });
 
@@ -377,7 +597,7 @@ async function renderGPPlot() {
                     y: data.test_points.y,
                     mode: "markers",
                     name: "Test",
-                    marker: { color: "blue", size: 6 }
+                    marker: { color: "#3399ff", size: 6, symbol: "x" }
                 });
             }
 
@@ -388,7 +608,7 @@ async function renderGPPlot() {
                 yaxis: { ...plotlyDarkLayout.yaxis, title: titles[1] }
             };
 
-            Plotly.newPlot("gpPlotDiv", traces, layout);
+            Plotly.newPlot("gpPlotDiv", traces, layout, plotlyConfig);
         } else if (data.n_features === 2) {
             // 3D Surface Plot
             const meshTrace = {
@@ -420,7 +640,7 @@ async function renderGPPlot() {
                     mode: "markers",
                     type: "scatter3d",
                     name: "Test",
-                    marker: { color: "blue", size: 4 }
+                    marker: { color: "#3399ff", size: 4 }
                 });
             }
 
@@ -428,36 +648,22 @@ async function renderGPPlot() {
                 ...plotlyDarkLayout,
                 title: data.graph_title,
                 scene: {
-                    xaxis: { title: titles[0], backgroundcolor: "#1a1a1a", gridcolor: "#333" },
-                    yaxis: { title: titles[1], backgroundcolor: "#1a1a1a", gridcolor: "#333" },
-                    zaxis: { title: titles[2] || "Y", backgroundcolor: "#1a1a1a", gridcolor: "#333" }
+                    xaxis: { title: titles[0], backgroundcolor: "#000000", gridcolor: "#333" },
+                    yaxis: { title: titles[1], backgroundcolor: "#000000", gridcolor: "#333" },
+                    zaxis: { title: titles[2] || "Y", backgroundcolor: "#000000", gridcolor: "#333" }
                 }
             };
 
-            Plotly.newPlot("gpPlotDiv", traces, layout);
+            Plotly.newPlot("gpPlotDiv", traces, layout, plotlyConfig);
         }
+
+        Plotly.Plots.resize("gpPlotDiv");
     } catch (err) {
         console.error("GP Plot error:", err);
     }
 }
 
-// Setup & Run Predict Y
-function setupPredInputs() {
-    const list = document.getElementById("predInputsList");
-    list.innerHTML = "";
-
-    const nFeat = Math.max(1, currentSession.n_dimensions - 1);
-    for (let i = 0; i < nFeat; i++) {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.step = "any";
-        input.className = "pred-x-val";
-        input.style.width = "65px";
-        input.value = "0";
-        list.appendChild(input);
-    }
-}
-
+// Predict Y
 async function runPredictY() {
     const inputs = document.querySelectorAll(".pred-x-val");
     const xVals = Array.from(inputs).map(i => parseFloat(i.value) || 0.0);
@@ -479,13 +685,29 @@ async function runPredictY() {
     }
 }
 
-// Render AF Plot & Run AL/BO
+// AL and BO Plot & Search
 async function renderAFPlot() {
+    const isStd = document.getElementById("chkALBOStandard").checked;
+    const isAvail = document.getElementById("chkALBOAvailable").checked;
+
+    const minInputs = document.querySelectorAll(".albo-min");
+    const maxInputs = document.querySelectorAll(".albo-max");
+
+    const xRanges = [];
+    minInputs.forEach((minInp, idx) => {
+        const maxInp = maxInputs[idx];
+        xRanges.push({
+            min: parseFloat(minInp.value) || 0,
+            max: parseFloat(maxInp.value) || 10
+        });
+    });
+
     const payload = {
         af_type: document.getElementById("selAFType").value,
-        standard_plot: document.getElementById("chkALBOStandard").checked,
-        import_available: document.getElementById("chkALBOAvailable").checked,
-        n_points: parseInt(document.getElementById("selALBONPoints").value) || 1000
+        standard_plot: isStd,
+        import_available: isAvail,
+        n_points: parseInt(document.getElementById("selALBONPoints").value) || 1000,
+        x_ranges: xRanges
     };
 
     try {
@@ -509,14 +731,14 @@ async function renderAFPlot() {
                 y: data.y_mean,
                 mode: "lines",
                 name: "Y mean",
-                line: { color: mColor }
+                line: { color: mColor, width: 2 }
             });
             traces.push({
                 x: data.x_plot,
                 y: data.af_plot,
                 mode: "lines",
                 name: "AF",
-                line: { color: afColor, dash: "dash" }
+                line: { color: afColor, dash: "dash", width: 2 }
             });
 
             const layout = {
@@ -526,7 +748,7 @@ async function renderAFPlot() {
                 yaxis: { ...plotlyDarkLayout.yaxis, title: "A.F." }
             };
 
-            Plotly.newPlot("afPlotDiv", traces, layout);
+            Plotly.newPlot("afPlotDiv", traces, layout, plotlyConfig);
         } else if (data.n_features === 2) {
             traces.push({
                 x: data.x1_plot,
@@ -541,34 +763,36 @@ async function renderAFPlot() {
                 ...plotlyDarkLayout,
                 title: data.graph_title,
                 scene: {
-                    xaxis: { title: titles[0], backgroundcolor: "#1a1a1a" },
-                    yaxis: { title: titles[1], backgroundcolor: "#1a1a1a" },
-                    zaxis: { title: "A.F.", backgroundcolor: "#1a1a1a" }
+                    xaxis: { title: titles[0], backgroundcolor: "#000000", gridcolor: "#333" },
+                    yaxis: { title: titles[1], backgroundcolor: "#000000", gridcolor: "#333" },
+                    zaxis: { title: "A.F.", backgroundcolor: "#000000", gridcolor: "#333" }
                 }
             };
 
-            Plotly.newPlot("afPlotDiv", traces, layout);
+            Plotly.newPlot("afPlotDiv", traces, layout, plotlyConfig);
         }
 
-        // Update Next Point Results
-        const container = document.getElementById("alboLimitsContainer");
-        container.innerHTML = "";
+        // Update Point to Measure in results
+        const resultSpans = document.querySelectorAll(".albo-result-val");
         data.next_point.forEach((val, idx) => {
-            const div = document.createElement("div");
-            div.className = "form-row";
-            div.innerHTML = `
-                <span>${titles[idx] || 'Var ' + (idx + 1)} :</span>
-                <span class="albo-result" style="font-weight: bold; color: #00ffcc;">${val}</span>
-            `;
-            container.appendChild(div);
+            if (resultSpans[idx]) {
+                resultSpans[idx].textContent = val;
+            }
         });
 
+        Plotly.Plots.resize("afPlotDiv");
     } catch (err) {
         console.error("AF Plot error:", err);
     }
 }
 
 async function searchALBOPoint() {
+    const isAvail = document.getElementById("chkALBOAvailable").checked;
+    if (isAvail && currentSession.available_data_columns.length === 0) {
+        // Prompt for available data CSV
+        document.getElementById("availableDataFileInput").click();
+        return;
+    }
     await renderAFPlot();
 }
 
@@ -581,6 +805,7 @@ function configReset() {
     document.getElementById("chkWhiteKernel").disabled = false;
     document.getElementById("chkSplit").disabled = false;
     document.getElementById("btnTrainModel").disabled = false;
+    document.querySelectorAll(".manual-x, .manual-y").forEach(inp => inp.disabled = false);
 }
 
 async function globalReset() {
@@ -589,6 +814,8 @@ async function globalReset() {
         currentSession.train_done = false;
         currentSession.type_data = "Manual";
         currentSession.n_dimensions = 2;
+        currentSession.axes_titles = ["X", "Y"];
+        currentSession.var_bounds = [{ name: "X", min: 0, max: 10 }];
 
         document.getElementById("lblDimensions").textContent = "---";
         document.getElementById("lblTrainPoints").textContent = "---";
@@ -596,6 +823,7 @@ async function globalReset() {
         document.getElementById("lblHyperparams").textContent = "---";
 
         configReset();
+        updateAllVariableInputs();
         await updateParityPlot();
         alert("Global Reset complete.");
     } catch (err) {
@@ -652,17 +880,31 @@ async function handleLoadSession(event) {
             n_train: data.n_train,
             n_test: data.n_test,
             num_params: data.num_params,
-            axes_titles: sData.Axes_titles
+            axes_titles: sData.Axes_titles,
+            var_bounds: data.var_bounds
         });
 
         await updateParityPlot();
         alert("Session loaded successfully!");
     } catch (err) {
         alert("Error loading session: " + err.message);
+    } finally {
+        event.target.value = "";
     }
 }
 
+// Responsive resize on window resize
+window.addEventListener("resize", () => {
+    ["parityPlotDiv", "gpPlotDiv", "afPlotDiv"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.data) {
+            Plotly.Plots.resize(el);
+        }
+    });
+});
+
 // Initial Setup
-window.addEventListener("DOMContentLoaded", () => {
-    updateParityPlot();
+window.addEventListener("DOMContentLoaded", async () => {
+    updateAllVariableInputs();
+    await updateParityPlot();
 });
