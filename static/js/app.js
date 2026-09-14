@@ -177,8 +177,14 @@ async function handleFileUpload(event) {
         if (!res.ok) throw new Error(data.detail || "Failed to parse CSV file");
 
         currentSession.csv_columns = data.columns;
+        currentSession.type_data = "Import";
+
+        // Disable manual points table inputs as in original Open_CSV_File()
+        document.querySelectorAll(".points-table input").forEach(input => {
+            input.disabled = true;
+        });
+
         populateCSVModal(data.columns);
-        openModal("modalCSVVars");
     } catch (err) {
         alert("Error uploading CSV: " + err.message);
     } finally {
@@ -297,10 +303,14 @@ async function confirmAvailableDataVariables() {
     }
 }
 
-// Train Model (Manual)
+// Train Model (Manual / CSV Router)
 async function trainModel() {
     if (currentSession.type_data === "Import") {
-        alert("Currently in CSV mode. Re-import CSV or perform Global Reset for Manual mode.");
+        if (!currentSession.csv_columns || currentSession.csv_columns.length === 0) {
+            alert("No CSV file loaded. Please upload a CSV file first.");
+            return;
+        }
+        openModal("modalCSVVars");
         return;
     }
 
@@ -932,6 +942,11 @@ async function globalReset() {
         currentSession.n_dimensions = 2;
         currentSession.axes_titles = ["X", "Y"];
         currentSession.var_bounds = [{ name: "X", min: 0, max: 10 }];
+        currentSession.csv_columns = [];
+
+        document.querySelectorAll(".points-table input").forEach(input => {
+            input.disabled = false;
+        });
 
         document.getElementById("lblDimensions").textContent = "---";
         document.getElementById("lblTrainPoints").textContent = "---";
