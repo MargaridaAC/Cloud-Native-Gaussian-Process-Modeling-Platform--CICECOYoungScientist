@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GP Training App</title>
-    <link rel="stylesheet" href="/static/css/styles.css?v=10">
+    <link rel="stylesheet" href="/static/css/styles.css?v=12">
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 </head>
 <body>
@@ -304,22 +304,22 @@
                 <span class="modal-close" onclick="closeModal('modalALBO')">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="plot-container" style="width: 450px; height: 365px;">
+                <div class="plot-container" style="width: 450px; height: 350px;">
                     <div id="afPlotDiv" class="plot-area"></div>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 8px; width: 340px;">
+                <div style="display: flex; flex-direction: column; gap: 6px; width: 340px;">
                     <!-- Search Limits Frame -->
-                    <div class="tk-frame" style="height: 180px; display: flex; flex-direction: column; justify-content: space-between;">
-                        <div class="albo-grid-row" style="font-weight: bold; border-bottom: 1px solid var(--border-color); padding-bottom: 3px;">
+                    <div class="tk-frame" style="height: 155px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box;">
+                        <div class="albo-grid-row" style="font-weight: bold; border-bottom: 1px solid var(--border-color); padding-bottom: 2px;">
                             <span>X Limits</span>
                             <span>Min</span>
                             <span>Max</span>
                             <span>Point</span>
                         </div>
-                        <div id="alboLimitsContainer" class="scroll-frame" style="height: 90px;">
+                        <div id="alboLimitsContainer" class="scroll-frame" style="height: 70px;">
                             <!-- Dynamically generated rows with labels on top/left of min/max inputs -->
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
                             <label class="checkbox-label"><input type="checkbox" id="chkALBOStandard" checked onchange="toggleALBOStandard()"> Standard</label>
                             <label class="checkbox-label"><input type="checkbox" id="chkALBOAvailable" onchange="toggleALBOAvailable()"> Available Data</label>
                             <input type="file" id="availableDataFileInput" accept=".csv" style="display: none;" onchange="handleAvailableDataUpload(event)">
@@ -328,9 +328,9 @@
                     </div>
 
                     <!-- Custom Plot Frame -->
-                    <div class="tk-frame" style="height: 175px; display: flex; flex-direction: column; justify-content: space-between;">
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <div class="form-row">
+                    <div class="tk-frame" style="height: 185px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box;">
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <div class="form-row" style="margin-bottom: 2px;">
                                 <label>Aquisition function :</label>
                                 <select id="selAFType" style="width: 100px;">
                                     <option value="Std" selected>Std</option>
@@ -340,7 +340,7 @@
                                     <option value="UCB">UCB</option>
                                 </select>
                             </div>
-                            <div class="form-row">
+                            <div class="form-row" style="margin-bottom: 2px;">
                                 <label>Nº of Plot Points :</label>
                                 <select id="selALBONPoints" style="width: 100px;">
                                     <option value="100">100</option>
@@ -349,21 +349,21 @@
                                     <option value="2000">2000</option>
                                 </select>
                             </div>
-                            <div class="form-row">
+                            <div class="form-row" style="margin-bottom: 2px;">
                                 <label>3D Graph Style :</label>
                                 <select id="selALBOCmap" style="width: 100px;">
                                     <option value="Viridis" selected>Viridis</option>
                                     <option value="Plasma">Plasma</option>
                                 </select>
                             </div>
-                            <div class="form-row">
+                            <div class="form-row" style="margin-bottom: 2px;">
                                 <label>2D Model color :</label>
                                 <select id="selALBOModelColor" style="width: 100px;">
                                     <option value="black" selected>black</option>
                                     <option value="red">red</option>
                                 </select>
                             </div>
-                            <div class="form-row">
+                            <div class="form-row" style="margin-bottom: 2px;">
                                 <label>2D AF color :</label>
                                 <select id="selALBOAFColor" style="width: 100px;">
                                     <option value="blue" selected>blue</option>
@@ -371,7 +371,7 @@
                                 </select>
                             </div>
                         </div>
-                        <button style="width: 100%; margin-top: 4px;" onclick="renderAFPlot()">Plot AF</button>
+                        <button style="width: 100%; margin-top: 2px;" onclick="renderAFPlot()">Plot AF</button>
                     </div>
                 </div>
             </div>
@@ -435,6 +435,6 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=11"></script>
+    <script src="/static/js/app.js?v=12"></script>
 </body>
 </html>
