@@ -808,9 +808,50 @@ function configReset() {
     document.querySelectorAll(".manual-x, .manual-y").forEach(inp => inp.disabled = false);
 }
 
+let activeFileHandle = null;
+
+function updateActiveFileLabel(filename) {
+    const lbl = document.getElementById("activeFileLabel");
+    if (lbl) {
+        if (filename) {
+            lbl.textContent = `File: ${filename}`;
+            lbl.style.color = "#0056b3";
+        } else {
+            lbl.textContent = "File: (Unsaved Session)";
+            lbl.style.color = "#666";
+        }
+    }
+}
+
+async function writeToActiveFileHandle(blob, defaultFilename) {
+    if (activeFileHandle && typeof activeFileHandle.createWritable === "function") {
+        try {
+            const writable = await activeFileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            updateActiveFileLabel(activeFileHandle.name);
+            return true;
+        } catch (err) {
+            console.warn("FileSystemFileHandle write failed or permission denied, falling back to download:", err);
+        }
+    }
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = defaultFilename || "gp_session.pkl";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    updateActiveFileLabel(defaultFilename);
+    return false;
+}
+
 async function globalReset() {
     try {
         await fetch("/api/global-reset", { method: "POST" });
+        activeFileHandle = null;
         currentSession.train_done = false;
         currentSession.type_data = "Manual";
         currentSession.n_dimensions = 2;
@@ -824,6 +865,7 @@ async function globalReset() {
 
         configReset();
         updateAllVariableInputs();
+        updateActiveFileLabel(null);
         await updateParityPlot();
         alert("Global Reset complete.");
     } catch (err) {
@@ -831,29 +873,38 @@ async function globalReset() {
     }
 }
 
-// Save Session (Export JSON)
-async function saveSession() {
-    try {
-        const res = await fetch("/api/export-session");
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "gp_session.json";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-    } catch (err) {
-        alert("Error saving session: " + err.message);
+// Load Session (Native File Picker)
+async function loadSession() {
+    if (window.showOpenFilePicker) {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{
+                    description: "Pickle & JSON Files (*.pkl, *.json)",
+                    accept: { "application/octet-stream": [".pkl"], "application/json": [".json"] }
+                }]
+            });
+            activeFileHandle = handle;
+            const file = await handle.getFile();
+            await processLoadedFile(file);
+            return;
+        } catch (err) {
+            if (err.name === "AbortError") return;
+            console.warn("showOpenFilePicker error, falling back to input:", err);
+        }
     }
+
+    document.getElementById("sessionFileInput").click();
 }
 
-// Load Session (Import JSON)
-async function handleLoadSession(event) {
+async function handleLoadSessionInput(event) {
     const file = event.target.files[0];
     if (!file) return;
+    activeFileHandle = null;
+    await processLoadedFile(file);
+    event.target.value = "";
+}
 
+async function processLoadedFile(file) {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -885,11 +936,113 @@ async function handleLoadSession(event) {
         });
 
         await updateParityPlot();
-        alert("Session loaded successfully!");
+
+        if (sData.train_done) {
+            const setDisabled = (id, disabled) => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = disabled;
+            };
+            setDisabled("btnTrainModel", true);
+            setDisabled("selKernel", true);
+            setDisabled("selNormLabel", true);
+            setDisabled("selNormFeat", true);
+            setDisabled("chkLikelihood", true);
+            setDisabled("chkWhiteKernel", true);
+            setDisabled("chkSplit", true);
+            setDisabled("txtTestSplit", true);
+            document.querySelectorAll(".manual-x, .manual-y").forEach(inp => inp.disabled = true);
+        } else {
+            configReset();
+        }
+
+        updateAllVariableInputs();
+        const fname = activeFileHandle ? activeFileHandle.name : file.name;
+        updateActiveFileLabel(fname);
+        alert(`Session '${fname}' loaded successfully!`);
     } catch (err) {
         alert("Error loading session: " + err.message);
-    } finally {
-        event.target.value = "";
+    }
+}
+
+// Save Session As
+async function saveAsSession() {
+    const suggestedName = activeFileHandle ? activeFileHandle.name : "gp_session.pkl";
+
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: suggestedName,
+                types: [{
+                    description: "Pickle Files (*.pkl)",
+                    accept: { "application/octet-stream": [".pkl"] }
+                }]
+            });
+            activeFileHandle = handle;
+            const res = await fetch(`/api/save-as?filename=${encodeURIComponent(handle.name)}`, { method: "POST" });
+            if (!res.ok) throw new Error("Failed to save session as pickle file.");
+            const blob = await res.blob();
+            const inPlace = await writeToActiveFileHandle(blob, handle.name);
+            if (inPlace) {
+                alert(`Session saved as '${handle.name}'!`);
+            }
+            return;
+        } catch (err) {
+            if (err.name === "AbortError") return;
+            console.warn("showSaveFilePicker error, falling back to modal:", err);
+        }
+    }
+
+    const input = document.getElementById("txtSaveAsFilename");
+    if (input && !input.value) {
+        input.value = suggestedName;
+    }
+    openModal("modalSaveAs");
+}
+
+async function confirmSaveAs() {
+    let filename = document.getElementById("txtSaveAsFilename").value.trim();
+    if (!filename) filename = "gp_session.pkl";
+    if (!filename.endsWith(".pkl")) filename += ".pkl";
+
+    closeModal("modalSaveAs");
+
+    try {
+        const res = await fetch(`/api/save-as?filename=${encodeURIComponent(filename)}`, { method: "POST" });
+        if (!res.ok) throw new Error("Failed to save session as pickle file.");
+        const blob = await res.blob();
+        await writeToActiveFileHandle(blob, filename);
+        alert(`Session saved as '${filename}'!`);
+    } catch (err) {
+        alert("Error saving session: " + err.message);
+    }
+}
+
+// Save Session (In-Place Overwrite)
+async function saveSession() {
+    if (!activeFileHandle) {
+        await saveAsSession();
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/save", { method: "POST" });
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+            const data = await res.json();
+            if (data.status === "no_save_path") {
+                await saveAsSession();
+                return;
+            }
+        }
+        if (!res.ok) throw new Error("Failed to save session.");
+
+        const blob = await res.blob();
+        const inPlace = await writeToActiveFileHandle(blob, activeFileHandle.name);
+        if (inPlace) {
+            alert(`Session saved directly to '${activeFileHandle.name}'!`);
+        }
+    } catch (err) {
+        alert("Error saving session: " + err.message);
     }
 }
 
@@ -906,5 +1059,10 @@ window.addEventListener("resize", () => {
 // Initial Setup
 window.addEventListener("DOMContentLoaded", async () => {
     updateAllVariableInputs();
+    try {
+        const res = await fetch("/api/model-info");
+        const info = await res.json();
+        updateActiveFileLabel(info.save_path);
+    } catch (e) {}
     await updateParityPlot();
 });

@@ -14,10 +14,10 @@
         <div class="menu-item">
             File
             <div class="dropdown-menu">
-                <input type="file" id="sessionFileInput" accept=".json" style="display: none;" onchange="handleLoadSession(event)">
-                <div class="dropdown-item" onclick="document.getElementById('sessionFileInput').click()">Load</div>
+                <input type="file" id="sessionFileInput" accept=".pkl,.json" style="display: none;" onchange="handleLoadSessionInput(event)">
+                <div class="dropdown-item" onclick="loadSession()">Load</div>
                 <div class="dropdown-item" onclick="saveSession()">Save</div>
-                <div class="dropdown-item" onclick="saveSession()">Save as</div>
+                <div class="dropdown-item" onclick="saveAsSession()">Save as</div>
             </div>
         </div>
         <div class="menu-item">
@@ -34,6 +34,7 @@
                 <div class="dropdown-item" onclick="alert('GP Training App - Web Edition')">About</div>
             </div>
         </div>
+        <div style="margin-left: auto; padding-right: 15px; font-size: 11px; color: #666; font-weight: bold; align-self: center;" id="activeFileLabel">File: (Unsaved Session)</div>
     </div>
 
     <!-- Main Container -->
@@ -416,6 +417,24 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <!-- MODAL 6: SAVE AS FILENAME PROMPT -->
+    <div class="modal-overlay" id="modalSaveAs">
+        <div class="modal-window" style="width: 320px; height: 180px;">
+            <div class="modal-header">
+                <span>Save Session As</span>
+                <span class="modal-close" onclick="closeModal('modalSaveAs')">&times;</span>
+            </div>
+            <div class="modal-body" style="flex-direction: column; gap: 12px; padding: 15px;">
+                <div style="font-size: 13px; font-weight: bold;">File Name (.pkl):</div>
+                <input type="text" id="txtSaveAsFilename" value="gp_session.pkl" style="width: 100%; padding: 6px; box-sizing: border-box;" onkeydown="if(event.key==='Enter') confirmSaveAs()">
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+                    <button onclick="closeModal('modalSaveAs')">Cancel</button>
+                    <button onclick="confirmSaveAs()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=6"></script>
 </body>
 </html>

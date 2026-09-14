@@ -8,7 +8,8 @@ from sklearn import metrics
 from sklearn.model_selection import train_test_split
 import gpflow
 import tensorflow as tf
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+import pickle
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -42,7 +43,8 @@ SESSION_STATE: Dict[str, Any] = {
     "num_params": 0,
     "df_full": None,
     "df_available": None,
-    "BO_zone_available": None
+    "BO_zone_available": None,
+    "Save_path": None
 }
 
 # =============================================================================
@@ -294,7 +296,8 @@ async def get_model_info():
         "var_bounds": get_var_bounds(),
         "num_params": SESSION_STATE["num_params"],
         "n_train": n_train,
-        "n_test": n_test
+        "n_test": n_test,
+        "save_path": SESSION_STATE.get("Save_path")
     }
 
 @app.post("/api/upload-csv")
@@ -747,64 +750,143 @@ async def run_albo(req: ALBORequest):
 
     return result
 
+def build_session_variables():
+    """Helper to build dictionary matching original script's Temp_path pickle variables."""
+    return {
+        "model": SESSION_STATE.get("model"),
+        "parms_X": SESSION_STATE.get("parms_X"),
+        "parms_Y": SESSION_STATE.get("parms_Y"),
+        "train_done": SESSION_STATE.get("train_done", False),
+        "X_Train": SESSION_STATE.get("X_Train"),
+        "Y_Train": SESSION_STATE.get("Y_Train"),
+        "X_Test": SESSION_STATE.get("X_Test"),
+        "Y_Test": SESSION_STATE.get("Y_Test"),
+        "ncol_data": SESSION_STATE.get("ncol_data", 2),
+        "X": SESSION_STATE.get("X"),
+        "Y": SESSION_STATE.get("Y"),
+        "Axes_titles": SESSION_STATE.get("Axes_titles", ["X", "Y"]),
+        "Graph_title": SESSION_STATE.get("Graph_title", ""),
+        "var_norm_label": SESSION_STATE.get("var_norm_label", "None"),
+        "var_norm_feat": SESSION_STATE.get("var_norm_feat", "None"),
+        "var_kernel": SESSION_STATE.get("var_kernel", "RBF"),
+        "trainlikelihood": SESSION_STATE.get("trainlikelihood", False),
+        "white_kernel": SESSION_STATE.get("white_kernel", False),
+        "Train_Test_Split": SESSION_STATE.get("Train_Test_Split", False),
+        "Split_Percentage": SESSION_STATE.get("Split_Percentage", 20.0),
+        "num_params": SESSION_STATE.get("num_params", 0),
+        "type_data": SESSION_STATE.get("type_data", "Manual"),
+        "df_full": SESSION_STATE.get("df_full"),
+        "df_available": SESSION_STATE.get("df_available"),
+        "BO_zone_available": SESSION_STATE.get("BO_zone_available")
+    }
+
+@app.api_route("/api/save-as", methods=["GET", "POST"])
+async def save_as(filename: Optional[str] = None):
+    if not filename:
+        filename = "gp_session.pkl"
+    if not filename.endswith(".pkl"):
+        filename += ".pkl"
+    
+    SESSION_STATE["Save_path"] = filename
+    variables = build_session_variables()
+
+    buffer = pickle.dumps(variables)
+    return Response(
+        content=buffer,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.api_route("/api/save", methods=["GET", "POST"])
+async def save():
+    save_path = SESSION_STATE.get("Save_path")
+    if not save_path:
+        return JSONResponse(content={"status": "no_save_path"}, status_code=200)
+
+    # In original script Save(), Save_path is deleted from payload dumped to Save_path
+    variables = build_session_variables()
+
+    buffer = pickle.dumps(variables)
+    return Response(
+        content=buffer,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{save_path}"'}
+    )
+
 @app.get("/api/export-session")
 async def export_session():
-    data = {
-        "type_data": SESSION_STATE["type_data"],
-        "train_done": SESSION_STATE["train_done"],
-        "var_kernel": SESSION_STATE["var_kernel"],
-        "var_norm_label": SESSION_STATE["var_norm_label"],
-        "var_norm_feat": SESSION_STATE["var_norm_feat"],
-        "trainlikelihood": SESSION_STATE["trainlikelihood"],
-        "white_kernel": SESSION_STATE["white_kernel"],
-        "Train_Test_Split": SESSION_STATE["Train_Test_Split"],
-        "Split_Percentage": SESSION_STATE["Split_Percentage"],
-        "ncol_data": SESSION_STATE["ncol_data"],
-        "Axes_titles": SESSION_STATE["Axes_titles"],
-        "Graph_title": SESSION_STATE["Graph_title"],
-        "num_params": SESSION_STATE["num_params"],
-        "X": SESSION_STATE["X"].tolist() if SESSION_STATE["X"] is not None else [],
-        "Y": SESSION_STATE["Y"].tolist() if SESSION_STATE["Y"] is not None else [],
-    }
-    return JSONResponse(
-        content=data,
-        headers={"Content-Disposition": "attachment; filename=gp_session.json"}
-    )
+    # Alias to save-as for backwards compatibility
+    return await save_as(SESSION_STATE.get("Save_path") or "gp_session.pkl")
 
 @app.post("/api/load-session")
 async def load_session(file: UploadFile = File(...)):
     contents = await file.read()
+    filename = file.filename or "loaded_session.pkl"
+
+    variables = {}
+    is_pickle = False
+
     try:
-        data = json.loads(contents.decode("utf-8"))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid session file format.")
+        variables = pickle.loads(contents)
+        is_pickle = True
+    except Exception:
+        try:
+            variables = json.loads(contents.decode("utf-8"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid session file format (.pkl or .json expected).")
 
-    X = np.array(data.get("X", []), dtype=np.float64)
-    Y = np.array(data.get("Y", []), dtype=np.float64)
+    # Update SESSION_STATE with loaded values
+    keys_to_update = [
+        "model", "parms_X", "parms_Y", "train_done", "X_Train", "Y_Train",
+        "X_Test", "Y_Test", "ncol_data", "X", "Y", "Axes_titles", "Graph_title",
+        "var_norm_label", "var_norm_feat", "var_kernel", "trainlikelihood",
+        "white_kernel", "Train_Test_Split", "Split_Percentage", "num_params",
+        "type_data", "df_full", "df_available", "BO_zone_available"
+    ]
 
-    config = {
-        "kernel": data.get("var_kernel", "RBF"),
-        "norm_label": data.get("var_norm_label", "None"),
-        "norm_feat": data.get("var_norm_feat", "None"),
-        "likelihood": data.get("trainlikelihood", False),
-        "white_kernel": data.get("white_kernel", False),
-        "split": data.get("Train_Test_Split", False),
-        "split_percentage": data.get("Split_Percentage", 20.0)
-    }
+    for key in keys_to_update:
+        if key in variables:
+            val = variables[key]
+            if isinstance(val, list) and key in ["X", "Y", "X_Train", "Y_Train", "X_Test", "Y_Test"]:
+                val = np.array(val, dtype=np.float64) if len(val) > 0 else None
+            SESSION_STATE[key] = val
 
-    if len(X) > 0 and len(Y) > 0:
-        fit_gp_model(X, Y, config)
+    SESSION_STATE["Save_path"] = filename
 
-    SESSION_STATE["Axes_titles"] = data.get("Axes_titles", ["X", "Y"])
-    SESSION_STATE["Graph_title"] = data.get("Graph_title", "Session Graph")
-    SESSION_STATE["type_data"] = data.get("type_data", "Manual")
+    # Prepare response for frontend to update UI
+    def to_list(arr):
+        return arr.tolist() if arr is not None and isinstance(arr, np.ndarray) else arr
+
+    n_train = int(len(SESSION_STATE["X_Train"])) if SESSION_STATE["X_Train"] is not None else 0
+    n_test = int(len(SESSION_STATE["X_Test"])) if SESSION_STATE["X_Test"] is not None else 0
 
     return {
         "status": "success",
-        "session_data": data,
-        "n_train": int(len(SESSION_STATE["X_Train"])) if SESSION_STATE["X_Train"] is not None else 0,
-        "n_test": int(len(SESSION_STATE["X_Test"])) if SESSION_STATE["X_Test"] is not None else 0,
-        "num_params": SESSION_STATE["num_params"],
+        "Save_path": filename,
+        "session_data": {
+            "type_data": SESSION_STATE.get("type_data", "Manual"),
+            "train_done": SESSION_STATE.get("train_done", False),
+            "var_kernel": SESSION_STATE.get("var_kernel", "RBF"),
+            "var_norm_label": SESSION_STATE.get("var_norm_label", "None"),
+            "var_norm_feat": SESSION_STATE.get("var_norm_feat", "None"),
+            "trainlikelihood": SESSION_STATE.get("trainlikelihood", False),
+            "white_kernel": SESSION_STATE.get("white_kernel", False),
+            "Train_Test_Split": SESSION_STATE.get("Train_Test_Split", False),
+            "Split_Percentage": SESSION_STATE.get("Split_Percentage", 20.0),
+            "ncol_data": SESSION_STATE.get("ncol_data", 2),
+            "Axes_titles": SESSION_STATE.get("Axes_titles", ["X", "Y"]),
+            "Graph_title": SESSION_STATE.get("Graph_title", ""),
+            "num_params": SESSION_STATE.get("num_params", 0),
+            "X": to_list(SESSION_STATE.get("X")),
+            "Y": to_list(SESSION_STATE.get("Y")),
+            "X_Train": to_list(SESSION_STATE.get("X_Train")),
+            "Y_Train": to_list(SESSION_STATE.get("Y_Train")),
+            "X_Test": to_list(SESSION_STATE.get("X_Test")),
+            "Y_Test": to_list(SESSION_STATE.get("Y_Test")),
+        },
+        "n_train": n_train,
+        "n_test": n_test,
+        "num_params": SESSION_STATE.get("num_params", 0),
         "var_bounds": get_var_bounds()
     }
 
@@ -828,7 +910,8 @@ async def global_reset():
         "num_params": 0,
         "df_full": None,
         "df_available": None,
-        "BO_zone_available": None
+        "BO_zone_available": None,
+        "Save_path": None
     })
     return {"status": "reset_success"}
 
