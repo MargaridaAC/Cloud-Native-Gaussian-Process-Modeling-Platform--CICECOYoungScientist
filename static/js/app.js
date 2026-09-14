@@ -805,7 +805,7 @@ function configReset() {
     document.getElementById("chkWhiteKernel").disabled = false;
     document.getElementById("chkSplit").disabled = false;
     document.getElementById("btnTrainModel").disabled = false;
-    document.querySelectorAll(".manual-x, .manual-y").forEach(inp => inp.disabled = false);
+    toggleSplitInput();
 }
 
 let activeFileHandle = null;
