@@ -926,7 +926,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 async def read_index():
     index_path = os.path.join(static_dir, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return HTMLResponse(content="<h1>GP Training App Web</h1><p>Index file missing.</p>")
 
 if __name__ == "__main__":

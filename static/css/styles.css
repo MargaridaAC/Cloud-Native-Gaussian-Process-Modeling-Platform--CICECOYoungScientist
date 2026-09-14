@@ -29,6 +29,8 @@ body {
 
 /* Menu Bar */
 .menu-bar {
+    position: relative;
+    z-index: 10000;
     background-color: var(--bg-base-color);
     display: flex;
     border: 1px solid var(--border-color);
@@ -327,21 +329,21 @@ button:disabled, input:disabled, select:disabled {
     display: block;
 }
 
-/* Modals / Sub-windows */
+/* Modals / Sub-windows (Multi-window Floating System) */
 .modal-overlay {
     display: none;
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0,0,0,0.65);
+    width: 0;
+    height: 0;
     z-index: 2000;
-    justify-content: center;
-    align-items: center;
+    pointer-events: none;
 }
 
 .modal-window {
+    pointer-events: auto;
+    position: fixed;
     background-color: var(--background-color);
     border: 2px solid var(--border-color);
     padding: 10px;
@@ -351,6 +353,7 @@ button:disabled, input:disabled, select:disabled {
     gap: 10px;
     border-radius: 4px;
     max-height: 95vh;
+    z-index: 2000;
 }
 
 .modal-header {
@@ -362,6 +365,8 @@ button:disabled, input:disabled, select:disabled {
     font-weight: bold;
     font-size: 13px;
     border: 1px solid var(--border-color);
+    cursor: move;
+    user-select: none;
 }
 
 .modal-close {

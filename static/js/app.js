@@ -27,11 +27,41 @@ const plotlyConfig = {
     modeBarButtonsToRemove: ['lasso2d', 'select2d']
 };
 
-// Modal Control
+// Multi-window & Modal Management System
+let highestZIndex = 2000;
+
+function bringToFront(modalEl) {
+    if (!modalEl) return;
+    highestZIndex++;
+    modalEl.style.zIndex = highestZIndex;
+    const win = modalEl.querySelector('.modal-window');
+    if (win) win.style.zIndex = highestZIndex;
+}
+
+const defaultModalPositions = {
+    modalPlot: { top: 60, left: 80 },
+    modalPred: { top: 90, left: 520 },
+    modalALBO: { top: 110, left: 200 },
+    modalCSVVars: { top: 120, left: 350 },
+    modalAvailableVars: { top: 140, left: 380 },
+    modalSaveAs: { top: 200, left: 400 }
+};
+
 function openModal(id) {
     const modal = document.getElementById(id);
     if (!modal) return;
+    
     modal.style.display = "flex";
+    bringToFront(modal);
+    
+    const win = modal.querySelector('.modal-window');
+    if (win) {
+        if (!win.style.top || !win.style.left) {
+            const pos = defaultModalPositions[id] || { top: 100, left: 200 };
+            win.style.top = `${pos.top}px`;
+            win.style.left = `${pos.left}px`;
+        }
+    }
     
     // Prevent plot shifting: trigger resize after container is visible
     setTimeout(() => {
@@ -52,6 +82,51 @@ function openModal(id) {
 function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.style.display = "none";
+}
+
+function makeWindowDraggable(modalEl) {
+    const header = modalEl.querySelector('.modal-header');
+    const win = modalEl.querySelector('.modal-window') || modalEl;
+    if (!header || !win) return;
+
+    win.addEventListener('mousedown', () => {
+        bringToFront(modalEl);
+    });
+
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+
+    header.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('modal-close')) return;
+
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+
+        const rect = win.getBoundingClientRect();
+        initialLeft = rect.left;
+        initialTop = rect.top;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+
+        e.preventDefault();
+    });
+
+    function onMouseMove(e) {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        win.style.left = `${initialLeft + dx}px`;
+        win.style.top = `${initialTop + dy}px`;
+    }
+
+    function onMouseUp() {
+        isDragging = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+    }
 }
 
 // Split Checkbox toggle
@@ -1058,6 +1133,9 @@ window.addEventListener("resize", () => {
 
 // Initial Setup
 window.addEventListener("DOMContentLoaded", async () => {
+    document.querySelectorAll('.modal-overlay').forEach(modalEl => {
+        makeWindowDraggable(modalEl);
+    });
     updateAllVariableInputs();
     try {
         const res = await fetch("/api/model-info");
