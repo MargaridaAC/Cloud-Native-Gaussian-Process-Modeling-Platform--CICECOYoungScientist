@@ -23,6 +23,7 @@ body {
     font-family: var(--font-family);
     font-size: 13px;
     padding: 10px;
+    min-height: 100vh;
     user-select: none;
     overflow-x: hidden;
 }
@@ -82,22 +83,23 @@ body {
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    width: 100%;
 }
 
 .left-column {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 205px;
-    flex-shrink: 0;
+    flex: 0 0 clamp(250px, 24vw, 340px);
+    width: auto;
 }
 
 .right-column {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 485px;
-    flex-shrink: 0;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 /* Frames / Panels */
@@ -239,7 +241,7 @@ button:disabled, input:disabled, select:disabled {
 
 /* Parity Plot Frame - Fixed sizing & shifting prevention */
 .parity-frame {
-    width: 485px;
+    width: 100%;
     height: 360px;
     display: flex;
     flex-direction: column;
@@ -278,13 +280,14 @@ button:disabled, input:disabled, select:disabled {
 
 /* Bottom Row */
 .bottom-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) minmax(205px, 1.6fr) minmax(130px, 1fr);
     gap: 10px;
-    width: 485px;
+    width: 100%;
 }
 
 .train-buttons-frame {
-    width: 130px;
+    width: auto;
     height: 130px;
     display: flex;
     flex-direction: column;
@@ -298,7 +301,7 @@ button:disabled, input:disabled, select:disabled {
 }
 
 .info-frame {
-    width: 205px;
+    width: auto;
     height: 130px;
     display: flex;
     flex-direction: column;
@@ -313,7 +316,7 @@ button:disabled, input:disabled, select:disabled {
 }
 
 .icon-frame {
-    width: 130px;
+    width: auto;
     height: 130px;
     display: flex;
     justify-content: center;
