@@ -1,3 +1,25 @@
+// Session ID Management for Multi-User Isolated Sessions
+function getSessionId() {
+    let sid = localStorage.getItem("gp_session_id");
+    if (!sid) {
+        sid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "session-" + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem("gp_session_id", sid);
+    }
+    return sid;
+}
+
+// Wrapper around fetch to automatically inject X-Session-ID header
+async function apiFetch(url, options = {}) {
+    options = options || {};
+    options.headers = options.headers || {};
+    if (options.headers instanceof Headers) {
+        options.headers.set("X-Session-ID", getSessionId());
+    } else {
+        options.headers["X-Session-ID"] = getSessionId();
+    }
+    return fetch(url, options);
+}
+
 // State Variables
 let currentSession = {
     train_done: false,
@@ -66,10 +88,12 @@ function openModal(id) {
     // Prevent plot shifting: trigger resize after container is visible
     setTimeout(() => {
         if (id === 'modalPlot') {
+            renderGPPlotLimits();
             const plotDiv = document.getElementById('gpPlotDiv');
             if (plotDiv) Plotly.Plots.resize(plotDiv);
             renderGPPlot();
         } else if (id === 'modalALBO') {
+            renderALBOLimits();
             const plotDiv = document.getElementById('afPlotDiv');
             if (plotDiv) Plotly.Plots.resize(plotDiv);
             renderAFPlot();
@@ -169,7 +193,7 @@ async function handleFileUpload(event) {
     formData.append("file", file);
 
     try {
-        const res = await fetch("/api/upload-csv", {
+        const res = await apiFetch("/api/upload-csv", {
             method: "POST",
             body: formData
         });
@@ -248,7 +272,7 @@ async function handleAvailableDataUpload(event) {
     formData.append("file", file);
 
     try {
-        const res = await fetch("/api/upload-available-data", {
+        const res = await apiFetch("/api/upload-available-data", {
             method: "POST",
             body: formData
         });
@@ -287,7 +311,7 @@ async function confirmAvailableDataVariables() {
     }
 
     try {
-        const res = await fetch("/api/confirm-available-data", {
+        const res = await apiFetch("/api/confirm-available-data", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ feature_cols: featCols })
@@ -333,7 +357,7 @@ async function trainModel() {
     };
 
     try {
-        const res = await fetch("/api/train-manual", {
+        const res = await apiFetch("/api/train-manual", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -363,7 +387,7 @@ async function trainModelCSV(labelCol, featCols) {
     };
 
     try {
-        const res = await fetch("/api/train-csv", {
+        const res = await apiFetch("/api/train-csv", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -489,7 +513,7 @@ async function updateParityPlot() {
     if (!plotDiv) return;
 
     try {
-        const res = await fetch("/api/parity");
+        const res = await apiFetch("/api/parity");
         const data = await res.json();
 
         if (!data.train_done) {
@@ -608,6 +632,18 @@ async function updateParityPlot() {
     }
 }
 
+function getColorRGBA(colorName, alpha = 0.2) {
+    const colorMap = {
+        "blue": `rgba(51, 153, 255, ${alpha})`,
+        "gray": `rgba(160, 160, 160, ${alpha})`,
+        "lightblue": `rgba(102, 204, 255, ${alpha})`,
+        "black": `rgba(0, 0, 0, ${alpha})`,
+        "red": `rgba(255, 50, 50, ${alpha})`,
+        "purple": `rgba(153, 51, 255, ${alpha})`
+    };
+    return colorMap[colorName.toLowerCase()] || `rgba(51, 153, 255, ${alpha})`;
+}
+
 // Render GP Plot (2D Curve or 3D Surface)
 async function renderGPPlot() {
     const isStd = document.getElementById("chkPlotStandard").checked;
@@ -630,7 +666,7 @@ async function renderGPPlot() {
     };
 
     try {
-        const res = await fetch("/api/plot-graph", {
+        const res = await apiFetch("/api/plot-graph", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -648,7 +684,7 @@ async function renderGPPlot() {
         const icColor = document.getElementById("selICColor").value;
 
         if (data.n_features === 1) {
-            // 2D Curve plot
+            // 2D Curve plot: Y mean (solid)
             traces.push({
                 x: data.x_plot,
                 y: data.y_mean,
@@ -657,14 +693,25 @@ async function renderGPPlot() {
                 line: { color: mColor, width: 2 }
             });
 
-            // 95% Confidence Interval band
+            // 95% Confidence Interval Upper bound (dashed)
             traces.push({
-                x: data.x_plot.concat(data.x_plot.slice().reverse()),
-                y: data.y_upper.concat(data.y_lower.slice().reverse()),
-                fill: "toself",
-                fillcolor: "rgba(51, 153, 255, 0.2)",
-                line: { color: icColor, dash: "dash", width: 1 },
-                name: "Y I.C. 95%"
+                x: data.x_plot,
+                y: data.y_upper,
+                mode: "lines",
+                name: "Y I.C. 95%",
+                line: { color: icColor, dash: "dash", width: 1.5 }
+            });
+
+            // 95% Confidence Interval Lower bound (dashed + fill to upper)
+            traces.push({
+                x: data.x_plot,
+                y: data.y_lower,
+                mode: "lines",
+                name: "Y I.C. 95% (lower)",
+                showlegend: false,
+                line: { color: icColor, dash: "dash", width: 1.5 },
+                fill: "tonexty",
+                fillcolor: getColorRGBA(icColor, 0.2)
             });
 
             // Train Points
@@ -673,7 +720,7 @@ async function renderGPPlot() {
                 y: data.train_points.y,
                 mode: "markers",
                 name: "Train",
-                marker: { color: "red", size: 6 }
+                marker: { color: "red", size: 6, symbol: "circle" }
             });
 
             if (data.has_test && data.test_points) {
@@ -688,23 +735,26 @@ async function renderGPPlot() {
 
             const layout = {
                 ...plotlyDarkLayout,
-                title: data.graph_title,
-                xaxis: { ...plotlyDarkLayout.xaxis, title: titles[0] },
-                yaxis: { ...plotlyDarkLayout.yaxis, title: titles[1] }
+                title: data.graph_title || "GRAPH",
+                xaxis: { ...plotlyDarkLayout.xaxis, title: titles[0] || "X" },
+                yaxis: { ...plotlyDarkLayout.yaxis, title: titles[1] || "Y" }
             };
 
             Plotly.newPlot("gpPlotDiv", traces, layout, plotlyConfig);
         } else if (data.n_features === 2) {
             // 3D Surface Plot
-            const meshTrace = {
-                x: data.x1_plot,
-                y: data.x2_plot,
-                z: data.y_mean,
-                type: "mesh3d",
-                colorscale: document.getElementById("selPlotCmap").value.toLowerCase(),
-                name: "Model Surface"
+            const colorscaleVal = document.getElementById("selPlotCmap").value;
+            const surfaceTrace = {
+                x: data.x1_axis,
+                y: data.x2_axis,
+                z: data.z_surface,
+                type: "surface",
+                colorscale: colorscaleVal,
+                name: "Model Surface",
+                showscale: true,
+                colorbar: { len: 0.8, title: titles[2] || "Y" }
             };
-            traces.push(meshTrace);
+            traces.push(surfaceTrace);
 
             // Train Points 3D
             traces.push({
@@ -714,7 +764,7 @@ async function renderGPPlot() {
                 mode: "markers",
                 type: "scatter3d",
                 name: "Train",
-                marker: { color: "red", size: 4 }
+                marker: { color: "red", size: 5, symbol: "circle" }
             });
 
             if (data.has_test && data.test_points) {
@@ -725,21 +775,24 @@ async function renderGPPlot() {
                     mode: "markers",
                     type: "scatter3d",
                     name: "Test",
-                    marker: { color: "#3399ff", size: 4 }
+                    marker: { color: "#3399ff", size: 5, symbol: "x" }
                 });
             }
 
             const layout = {
                 ...plotlyDarkLayout,
-                title: data.graph_title,
+                title: data.graph_title || "GRAPH",
                 scene: {
-                    xaxis: { title: titles[0], backgroundcolor: "#000000", gridcolor: "#333" },
-                    yaxis: { title: titles[1], backgroundcolor: "#000000", gridcolor: "#333" },
+                    xaxis: { title: titles[0] || "X1", backgroundcolor: "#000000", gridcolor: "#333" },
+                    yaxis: { title: titles[1] || "X2", backgroundcolor: "#000000", gridcolor: "#333" },
                     zaxis: { title: titles[2] || "Y", backgroundcolor: "#000000", gridcolor: "#333" }
                 }
             };
 
             Plotly.newPlot("gpPlotDiv", traces, layout, plotlyConfig);
+        } else {
+            // >2 features fallback (empty graph matching original)
+            Plotly.newPlot("gpPlotDiv", [], { ...plotlyDarkLayout, title: "GRAPH" }, plotlyConfig);
         }
 
         Plotly.Plots.resize("gpPlotDiv");
@@ -755,7 +808,7 @@ async function runPredictY() {
     const confLevel = parseFloat(document.getElementById("txtCIPercent").value) || 95.0;
 
     try {
-        const res = await fetch("/api/predict-y", {
+        const res = await apiFetch("/api/predict-y", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ x_values: xVals, confidence_level: confLevel })
@@ -796,7 +849,7 @@ async function renderAFPlot() {
     };
 
     try {
-        const res = await fetch("/api/albo", {
+        const res = await apiFetch("/api/albo", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -874,7 +927,6 @@ async function renderAFPlot() {
 async function searchALBOPoint() {
     const isAvail = document.getElementById("chkALBOAvailable").checked;
     if (isAvail && currentSession.available_data_columns.length === 0) {
-        // Prompt for available data CSV
         document.getElementById("availableDataFileInput").click();
         return;
     }
@@ -924,7 +976,7 @@ async function writeToActiveFileHandle(blob, defaultFilename) {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = defaultFilename || "gp_session.pkl";
+    a.download = defaultFilename || "gp_session.json";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -935,7 +987,7 @@ async function writeToActiveFileHandle(blob, defaultFilename) {
 
 async function globalReset() {
     try {
-        await fetch("/api/global-reset", { method: "POST" });
+        await apiFetch("/api/global-reset", { method: "POST" });
         activeFileHandle = null;
         currentSession.train_done = false;
         currentSession.type_data = "Manual";
@@ -969,8 +1021,8 @@ async function loadSession() {
         try {
             const [handle] = await window.showOpenFilePicker({
                 types: [{
-                    description: "Pickle & JSON Files (*.pkl, *.json)",
-                    accept: { "application/octet-stream": [".pkl"], "application/json": [".json"] }
+                    description: "JSON Files (*.json)",
+                    accept: { "application/json": [".json"] }
                 }]
             });
             activeFileHandle = handle;
@@ -999,7 +1051,7 @@ async function processLoadedFile(file) {
     formData.append("file", file);
 
     try {
-        const res = await fetch("/api/load-session", {
+        const res = await apiFetch("/api/load-session", {
             method: "POST",
             body: formData
         });
@@ -1056,20 +1108,20 @@ async function processLoadedFile(file) {
 
 // Save Session As
 async function saveAsSession() {
-    const suggestedName = activeFileHandle ? activeFileHandle.name : "gp_session.pkl";
+    const suggestedName = activeFileHandle ? activeFileHandle.name : "gp_session.json";
 
     if (window.showSaveFilePicker) {
         try {
             const handle = await window.showSaveFilePicker({
                 suggestedName: suggestedName,
                 types: [{
-                    description: "Pickle Files (*.pkl)",
-                    accept: { "application/octet-stream": [".pkl"] }
+                    description: "JSON Files (*.json)",
+                    accept: { "application/json": [".json"] }
                 }]
             });
             activeFileHandle = handle;
-            const res = await fetch(`/api/save-as?filename=${encodeURIComponent(handle.name)}`, { method: "POST" });
-            if (!res.ok) throw new Error("Failed to save session as pickle file.");
+            const res = await apiFetch(`/api/save-as?filename=${encodeURIComponent(handle.name)}`, { method: "POST" });
+            if (!res.ok) throw new Error("Failed to save session as JSON file.");
             const blob = await res.blob();
             const inPlace = await writeToActiveFileHandle(blob, handle.name);
             if (inPlace) {
@@ -1091,14 +1143,14 @@ async function saveAsSession() {
 
 async function confirmSaveAs() {
     let filename = document.getElementById("txtSaveAsFilename").value.trim();
-    if (!filename) filename = "gp_session.pkl";
-    if (!filename.endsWith(".pkl")) filename += ".pkl";
+    if (!filename) filename = "gp_session.json";
+    if (!filename.endsWith(".json")) filename += ".json";
 
     closeModal("modalSaveAs");
 
     try {
-        const res = await fetch(`/api/save-as?filename=${encodeURIComponent(filename)}`, { method: "POST" });
-        if (!res.ok) throw new Error("Failed to save session as pickle file.");
+        const res = await apiFetch(`/api/save-as?filename=${encodeURIComponent(filename)}`, { method: "POST" });
+        if (!res.ok) throw new Error("Failed to save session as JSON file.");
         const blob = await res.blob();
         await writeToActiveFileHandle(blob, filename);
         alert(`Session saved as '${filename}'!`);
@@ -1115,7 +1167,7 @@ async function saveSession() {
     }
 
     try {
-        const res = await fetch("/api/save", { method: "POST" });
+        const res = await apiFetch("/api/save", { method: "POST" });
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
             const data = await res.json();
@@ -1153,7 +1205,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
     updateAllVariableInputs();
     try {
-        const res = await fetch("/api/model-info");
+        const res = await apiFetch("/api/model-info");
         const info = await res.json();
         updateActiveFileLabel(info.save_path);
     } catch (e) {}

@@ -8,5 +8,5 @@ scikit-learn
 gpflow
 tensorflow
 scipy
-matplotlib
-Pillow
+pytest
+httpx
