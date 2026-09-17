@@ -1,6 +1,6 @@
 # Como Executar a Aplicação Web (GP Training App)
 
-Para abrir a aplicação no seu computador:
+Para abrir a aplicação no seu computador::
 
 1. Abra o terminal na pasta do projeto:
    ```bash
