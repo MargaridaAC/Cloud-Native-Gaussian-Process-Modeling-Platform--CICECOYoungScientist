@@ -1,20 +1,21 @@
-import os
 import io
 import json
-import uuid
-import time
+import os
 import tempfile
+import time
+import uuid
+from typing import Any
+
+import gpflow
 import numpy as np
 import pandas as pd
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from scipy.stats import norm
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
-import gpflow
-from fastapi import FastAPI, File, UploadFile, HTTPException, Response, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 
 app = FastAPI(title="GP Training App Web")
 
@@ -38,7 +39,7 @@ SESSION_DIR = os.path.join(tempfile.gettempdir(), "gp_sessions")
 os.makedirs(SESSION_DIR, exist_ok=True)
 
 # In-memory GPFlow model objects per session ID
-SESSION_MODELS: Dict[str, Any] = {}
+SESSION_MODELS: dict[str, Any] = {}
 
 REDIS_URL = os.environ.get("REDIS_URL")
 redis_client = None
@@ -50,7 +51,7 @@ if REDIS_URL:
     except Exception as e:
         print(f"Failed to connect to Redis at {REDIS_URL}: {e}")
 
-def get_default_session_state() -> Dict[str, Any]:
+def get_default_session_state() -> dict[str, Any]:
     return {
         "type_data": "Manual",
         "train_done": False,
@@ -89,7 +90,7 @@ class SessionManager:
         return sid.strip()
 
     @staticmethod
-    def get_session(session_id: str) -> Dict[str, Any]:
+    def get_session(session_id: str) -> dict[str, Any]:
         SessionManager.cleanup_expired_sessions()
 
         state = None
@@ -133,7 +134,7 @@ class SessionManager:
         return state
 
     @staticmethod
-    def save_session(session_id: str, state: Dict[str, Any]):
+    def save_session(session_id: str, state: dict[str, Any]):
         state["last_accessed"] = time.time()
         model = state.get("model")
         if model is not None:
@@ -259,11 +260,7 @@ def Normalization(inpt, option, parms=None, reverse=False, var={"bol": False, "Y
             if reverse:
                 outpt = inpt * (parms[1] ** 2)
 
-        elif option == "LogStand":
-            if reverse:
-                outpt = inpt * (parms[1] * np.exp(parms[0] + parms[1] * var["Y_N"])) ** 2
-
-        elif option == "Log + bStand":
+        elif option == "LogStand" or option == "Log + bStand":
             if reverse:
                 outpt = inpt * (parms[1] * np.exp(parms[0] + parms[1] * var["Y_N"])) ** 2
 
@@ -278,8 +275,8 @@ def Normalization(inpt, option, parms=None, reverse=False, var={"bol": False, "Y
 # =============================================================================
 
 class ManualTrainData(BaseModel):
-    x_points: List[float]
-    y_points: List[float]
+    x_points: list[float]
+    y_points: list[float]
     kernel: str = "RBF"
     norm_label: str = "None"
     norm_feat: str = "None"
@@ -290,7 +287,7 @@ class ManualTrainData(BaseModel):
 
 class CSVTrainData(BaseModel):
     label_col: str
-    feature_cols: List[str]
+    feature_cols: list[str]
     kernel: str = "RBF"
     norm_label: str = "None"
     norm_feat: str = "None"
@@ -300,50 +297,50 @@ class CSVTrainData(BaseModel):
     split_percentage: float = 20.0
 
 class AvailableDataConfirm(BaseModel):
-    feature_cols: List[str]
+    feature_cols: list[str]
 
 class PredictYRequest(BaseModel):
-    x_values: List[float]
+    x_values: list[float]
     confidence_level: float = 95.0
 
 class PlotGraphRequest(BaseModel):
     standard_plot: bool = True
     n_points: int = 1000
-    var_ranges: Optional[List[Dict[str, float]]] = None
+    var_ranges: list[dict[str, float]] | None = None
 
 class ALBORequest(BaseModel):
     af_type: str = "Std"
     standard_plot: bool = True
     import_available: bool = False
     n_points: int = 1000
-    x_ranges: Optional[List[Dict[str, float]]] = None
+    x_ranges: list[dict[str, float]] | None = None
 
 class SessionSaveSchema(BaseModel):
-    type_data: Optional[str] = "Manual"
-    train_done: Optional[bool] = False
-    ncol_data: Optional[int] = 2
-    Axes_titles: Optional[List[str]] = ["X", "Y"]
-    Graph_title: Optional[str] = ""
-    var_norm_label: Optional[str] = "None"
-    var_norm_feat: Optional[str] = "None"
-    var_kernel: Optional[str] = "RBF"
-    trainlikelihood: Optional[bool] = False
-    white_kernel: Optional[bool] = False
-    Train_Test_Split: Optional[bool] = False
-    Split_Percentage: Optional[float] = 20.0
-    num_params: Optional[int] = 0
-    X: Optional[List[Any]] = None
-    Y: Optional[List[Any]] = None
-    X_Train: Optional[List[Any]] = None
-    Y_Train: Optional[List[Any]] = None
-    X_Test: Optional[List[Any]] = None
-    Y_Test: Optional[List[Any]] = None
-    parms_X: Optional[List[Any]] = None
-    parms_Y: Optional[List[Any]] = None
-    df_full: Optional[List[Dict[str, Any]]] = None
-    df_available: Optional[List[Dict[str, Any]]] = None
-    BO_zone_available: Optional[List[Any]] = None
-    Save_path: Optional[str] = None
+    type_data: str | None = "Manual"
+    train_done: bool | None = False
+    ncol_data: int | None = 2
+    Axes_titles: list[str] | None = ["X", "Y"]
+    Graph_title: str | None = ""
+    var_norm_label: str | None = "None"
+    var_norm_feat: str | None = "None"
+    var_kernel: str | None = "RBF"
+    trainlikelihood: bool | None = False
+    white_kernel: bool | None = False
+    Train_Test_Split: bool | None = False
+    Split_Percentage: float | None = 20.0
+    num_params: int | None = 0
+    X: list[Any] | None = None
+    Y: list[Any] | None = None
+    X_Train: list[Any] | None = None
+    Y_Train: list[Any] | None = None
+    X_Test: list[Any] | None = None
+    Y_Test: list[Any] | None = None
+    parms_X: list[Any] | None = None
+    parms_Y: list[Any] | None = None
+    df_full: list[dict[str, Any]] | None = None
+    df_available: list[dict[str, Any]] | None = None
+    BO_zone_available: list[Any] | None = None
+    Save_path: str | None = None
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -358,7 +355,7 @@ def to_serializable(val):
         return val.item()
     return val
 
-def fit_gp_model(X, Y, config, session_state: Dict[str, Any]):
+def fit_gp_model(X, Y, config, session_state: dict[str, Any]):
     var_kernel = config["kernel"]
     var_norm_label = config["norm_label"]
     var_norm_feat = config["norm_feat"]
@@ -434,7 +431,7 @@ def fit_gp_model(X, Y, config, session_state: Dict[str, Any]):
 
     return model, parms_X, parms_Y, X_Train, Y_Train, X_Test, Y_Test, num_params
 
-def get_var_bounds(session_state: Dict[str, Any]):
+def get_var_bounds(session_state: dict[str, Any]):
     X = session_state.get("X")
     Axes_titles = session_state.get("Axes_titles", ["X", "Y"])
     if X is None or len(X) == 0:
@@ -591,8 +588,8 @@ async def train_manual(request: Request, req: ManualTrainData):
     return {
         "status": "success",
         "n_dimensions": 2,
-        "n_train": int(len(X_Train)),
-        "n_test": int(len(X_Test)),
+        "n_train": len(X_Train),
+        "n_test": len(X_Test),
         "num_params": int(num_params),
         "axes_titles": ["X", "Y"],
         "var_bounds": get_var_bounds(session_state)
@@ -644,8 +641,8 @@ async def train_csv(request: Request, req: CSVTrainData):
     return {
         "status": "success",
         "n_dimensions": int(ncol_data),
-        "n_train": int(len(X_Train)),
-        "n_test": int(len(X_Test)),
+        "n_train": len(X_Train),
+        "n_test": len(X_Test),
         "num_params": int(num_params),
         "axes_titles": Axes_titles,
         "var_bounds": get_var_bounds(session_state)
@@ -969,7 +966,7 @@ async def run_albo(request: Request, req: ALBORequest):
 
     return result
 
-def build_session_variables(session_state: Dict[str, Any]):
+def build_session_variables(session_state: dict[str, Any]):
     def to_list(val):
         if isinstance(val, np.ndarray):
             return val.tolist()
@@ -1006,7 +1003,7 @@ def build_session_variables(session_state: Dict[str, Any]):
     }
 
 @app.api_route("/api/save-as", methods=["GET", "POST"])
-async def save_as(request: Request, filename: Optional[str] = None):
+async def save_as(request: Request, filename: str | None = None):
     sid = SessionManager.get_session_id(request)
     session_state = SessionManager.get_session(sid)
 
@@ -1067,7 +1064,7 @@ async def load_session(request: Request, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid session file format (.json expected with valid schema): {str(e)}"
+            detail=f"Invalid session file format (.json expected with valid schema): {e!s}"
         )
 
     loaded_dict = validated.model_dump()
@@ -1100,8 +1097,8 @@ async def load_session(request: Request, file: UploadFile = File(...)):
     def to_list(arr):
         return arr.tolist() if isinstance(arr, np.ndarray) else arr
 
-    n_train = int(len(session_state["X_Train"])) if session_state.get("X_Train") is not None else 0
-    n_test = int(len(session_state["X_Test"])) if session_state.get("X_Test") is not None else 0
+    n_train = len(session_state["X_Train"]) if session_state.get("X_Train") is not None else 0
+    n_test = len(session_state["X_Test"]) if session_state.get("X_Test") is not None else 0
 
     return {
         "status": "success",
