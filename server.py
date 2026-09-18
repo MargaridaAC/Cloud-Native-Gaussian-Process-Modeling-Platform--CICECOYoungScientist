@@ -193,6 +193,10 @@ def Normalization(inpt, option, parms=None, reverse=False, var={"bol": False, "Y
         return inpt, parms
 
     inpt = np.array(inpt, dtype=np.float64)
+    if parms is not None:
+        parms = [np.asarray(parms[0], dtype=np.float64), np.asarray(parms[1], dtype=np.float64)]
+
+    outpt = inpt
 
     if not var["bol"]:
         if option == "None":
@@ -253,8 +257,7 @@ def Normalization(inpt, option, parms=None, reverse=False, var={"bol": False, "Y
 
     elif var["bol"]:
         if option == "None":
-            if reverse:
-                outpt = inpt
+            outpt = inpt
 
         elif option == "Standardization":
             if reverse:
@@ -543,6 +546,13 @@ async def confirm_available_data(request: Request, req: AvailableDataConfirm):
     selected_cols = [c for c in req.feature_cols if c in df.columns]
     if len(selected_cols) == 0:
         raise HTTPException(status_code=400, detail="Select at least 1 feature column for search.")
+
+    expected_n_feat = session_state.get("n_dimensions", 2) - 1
+    if len(selected_cols) != expected_n_feat:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The trained model expects {expected_n_feat} feature(s), but you selected {len(selected_cols)} feature column(s)."
+        )
 
     BO_zone = df[selected_cols].dropna().values.astype(float)
     session_state["BO_zone_available"] = BO_zone
