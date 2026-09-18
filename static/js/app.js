@@ -521,6 +521,7 @@ async function updateParityPlot() {
                 ...plotlyDarkLayout,
                 title: "Parity plot"
             }, plotlyConfig);
+            setTimeout(() => Plotly.Plots.resize("parityPlotDiv"), 50);
             return;
         }
 
@@ -627,6 +628,7 @@ async function updateParityPlot() {
 
         Plotly.newPlot("parityPlotDiv", traces, layout, plotlyConfig);
         Plotly.Plots.resize("parityPlotDiv");
+        setTimeout(() => Plotly.Plots.resize("parityPlotDiv"), 50);
     } catch (err) {
         console.error("Parity Plot error:", err);
     }
@@ -1204,10 +1206,27 @@ window.addEventListener("DOMContentLoaded", async () => {
         makeWindowDraggable(modalEl);
     });
     updateAllVariableInputs();
+
+    if (typeof ResizeObserver !== "undefined") {
+        const ro = new ResizeObserver(() => {
+            ["parityPlotDiv", "gpPlotDiv", "afPlotDiv"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.data) {
+                    Plotly.Plots.resize(el);
+                }
+            });
+        });
+        document.querySelectorAll(".plot-container").forEach(c => ro.observe(c));
+    }
+
     try {
         const res = await apiFetch("/api/model-info");
         const info = await res.json();
         updateActiveFileLabel(info.save_path);
     } catch (e) {}
     await updateParityPlot();
+    setTimeout(() => {
+        const el = document.getElementById("parityPlotDiv");
+        if (el) Plotly.Plots.resize(el);
+    }, 100);
 });

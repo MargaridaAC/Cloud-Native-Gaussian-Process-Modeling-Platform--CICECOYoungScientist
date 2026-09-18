@@ -17,15 +17,33 @@
     padding: 0;
 }
 
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
 body {
     background-color: var(--background-color);
     color: var(--fg-base-color);
     font-family: var(--font-family);
     font-size: 13px;
     padding: 10px;
-    min-height: 100vh;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
     user-select: none;
-    overflow-x: hidden;
+    overflow: hidden;
+}
+
+@media (max-height: 580px) {
+    html, body {
+        height: auto;
+    }
+    body {
+        overflow-y: auto;
+    }
 }
 
 /* Menu Bar */
@@ -38,6 +56,7 @@ body {
     margin-bottom: 10px;
     padding: 2px 5px;
     border-radius: 2px;
+    flex-shrink: 0;
 }
 
 .menu-item {
@@ -78,12 +97,14 @@ body {
     background-color: var(--entr-btn-color);
 }
 
-/* Main Container Layout - Tkinter geometry 720x530 / 1200x800 */
+/* Main Container Layout */
 .app-container {
     display: flex;
     gap: 12px;
-    align-items: flex-start;
+    align-items: stretch;
     width: 100%;
+    flex: 1;
+    min-height: 0;
 }
 
 .left-column {
@@ -92,6 +113,8 @@ body {
     gap: 10px;
     flex: 0 0 clamp(250px, 24vw, 340px);
     width: auto;
+    height: 100%;
+    min-height: 0;
 }
 
 .right-column {
@@ -100,6 +123,8 @@ body {
     gap: 10px;
     flex: 1 1 auto;
     min-width: 0;
+    height: 100%;
+    min-height: 0;
 }
 
 /* Frames / Panels */
@@ -161,10 +186,18 @@ button:disabled, input:disabled, select:disabled {
 
 /* Specific Frame Styles */
 /* Training Points Frame */
+.points-frame {
+    flex: 1;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+}
+
 .points-table-container {
-    max-height: 148px;
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    min-height: 90px;
 }
 
 .points-table-container::-webkit-scrollbar {
@@ -202,7 +235,8 @@ button:disabled, input:disabled, select:disabled {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 50px;
+    height: 48px;
+    flex-shrink: 0;
 }
 
 .import-frame button {
@@ -210,6 +244,11 @@ button:disabled, input:disabled, select:disabled {
 }
 
 /* Kernel & Normalization Frame */
+.kernel-frame {
+    height: 155px;
+    flex-shrink: 0;
+}
+
 .form-row {
     display: flex;
     justify-content: space-between;
@@ -237,12 +276,15 @@ button:disabled, input:disabled, select:disabled {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    height: 75px;
+    flex-shrink: 0;
 }
 
-/* Parity Plot Frame - Fixed sizing & shifting prevention */
+/* Parity Plot Frame - Flex fill available vertical space */
 .parity-frame {
     width: 100%;
-    height: 360px;
+    flex: 1;
+    min-height: 250px;
     display: flex;
     flex-direction: column;
     padding: 8px;
@@ -250,7 +292,8 @@ button:disabled, input:disabled, select:disabled {
 
 .plot-container {
     width: 100%;
-    height: 290px;
+    flex: 1;
+    min-height: 180px;
     position: relative;
     overflow: hidden;
     background-color: #000000;
@@ -264,12 +307,20 @@ button:disabled, input:disabled, select:disabled {
     overflow: hidden;
 }
 
+.plot-area .js-plotly-plot,
+.plot-area .plot-container,
+.plot-area .svg-container {
+    width: 100% !important;
+    height: 100% !important;
+}
+
 .parity-options {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-top: 6px;
     padding: 2px 4px;
+    flex-shrink: 0;
 }
 
 .parity-checkboxes {
@@ -284,6 +335,7 @@ button:disabled, input:disabled, select:disabled {
     grid-template-columns: minmax(130px, 1fr) minmax(205px, 1.6fr) minmax(130px, 1fr);
     gap: 10px;
     width: 100%;
+    flex-shrink: 0;
 }
 
 .train-buttons-frame {
