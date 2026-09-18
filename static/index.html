@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GP Training App</title>
-    <link rel="stylesheet" href="/static/css/styles.css?v=15">
+    <link rel="stylesheet" href="/static/css/styles.css?v=18">
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 </head>
 <body>
@@ -125,7 +125,7 @@
             </div>
 
             <!-- Split Frame -->
-            <div class="tk-frame split-frame" style="height: 80px;">
+            <div class="tk-frame split-frame">
                 <label class="checkbox-label">
                     <input type="checkbox" id="chkSplit" onchange="toggleSplitInput()"> Split
                 </label>
@@ -135,6 +135,13 @@
                         <input type="number" id="txtTestSplit" value="20" style="width: 50px;" disabled> %
                     </div>
                 </div>
+            </div>
+
+            <!-- Train Buttons Frame -->
+            <div class="tk-frame train-buttons-frame">
+                <button id="btnTrainModel" onclick="trainModel()">Train Model</button>
+                <button onclick="configReset()">Config. Reset</button>
+                <button onclick="globalReset()">Global Reset</button>
             </div>
         </div>
 
@@ -159,13 +166,6 @@
 
             <!-- Bottom Row -->
             <div class="bottom-row">
-                <!-- Train Buttons Frame -->
-                <div class="tk-frame train-buttons-frame">
-                    <button id="btnTrainModel" onclick="trainModel()">Train Model</button>
-                    <button onclick="configReset()">Config. Reset</button>
-                    <button onclick="globalReset()">Global Reset</button>
-                </div>
-
                 <!-- Info Frame -->
                 <div class="tk-frame info-frame">
                     <div class="frame-title">Model details</div>
@@ -435,6 +435,6 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=15"></script>
+    <script src="/static/js/app.js?v=18"></script>
 </body>
 </html>
