@@ -14,4 +14,4 @@ tf_keras
 scipy
 pytest
 httpx
-
+matplotlib
