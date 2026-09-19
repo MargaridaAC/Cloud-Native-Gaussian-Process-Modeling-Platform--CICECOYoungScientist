@@ -10,7 +10,6 @@ from typing import Any
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 import gpflow
 import numpy as np
@@ -899,20 +898,24 @@ async def get_plot_graph(request: Request, req: PlotGraphRequest):
             return {"train_done": False}
 
         X = np.asarray(X, dtype=np.float64)
-        if X.ndim == 1: X = X.reshape(-1, 1)
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
         X_Train = np.asarray(X_Train, dtype=np.float64)
-        if X_Train.ndim == 1: X_Train = X_Train.reshape(-1, 1)
+        if X_Train.ndim == 1:
+            X_Train = X_Train.reshape(-1, 1)
         Y_Train = np.asarray(Y_Train, dtype=np.float64)
-        if Y_Train.ndim == 1: Y_Train = Y_Train.reshape(-1, 1)
+        if Y_Train.ndim == 1:
+            Y_Train = Y_Train.reshape(-1, 1)
 
         has_test = session_state.get("Train_Test_Split", False) and X_Test is not None and len(X_Test) > 0 and Y_Test is not None and len(Y_Test) > 0
         if has_test:
             X_Test = np.asarray(X_Test, dtype=np.float64)
-            if X_Test.ndim == 1: X_Test = X_Test.reshape(-1, 1)
+            if X_Test.ndim == 1:
+                X_Test = X_Test.reshape(-1, 1)
             Y_Test = np.asarray(Y_Test, dtype=np.float64)
-            if Y_Test.ndim == 1: Y_Test = Y_Test.reshape(-1, 1)
+            if Y_Test.ndim == 1:
+                Y_Test = Y_Test.reshape(-1, 1)
 
-        ncol_data = session_state.get("ncol_data", X.shape[1] + 1)
         var_norm_label = session_state.get("var_norm_label", "None")
         var_norm_feat = session_state.get("var_norm_feat", "None")
         Axes_titles = session_state.get("Axes_titles", ["X", "Y"])
@@ -959,9 +962,11 @@ async def get_plot_graph(request: Request, req: PlotGraphRequest):
                 Y_Lower = Y_mean.flatten() - 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))
 
                 m_color = getattr(req, "model_color", "black")
-                if m_color == "black": m_color = "#ffffff"
+                if m_color == "black":
+                    m_color = "#ffffff"
                 ic_color = getattr(req, "ic_color", "blue")
-                if ic_color == "blue": ic_color = "#3399ff"
+                if ic_color == "blue":
+                    ic_color = "#3399ff"
 
                 ax.plot(X_Plot_grid[:, 0], Y_mean.flatten(), label="Y mean", color=m_color, linewidth=2)
                 ax.plot(X_Plot_grid[:, 0], Y_Upper, "--", label="Y I.C. 95%", color=ic_color, linewidth=1.5)
@@ -1102,17 +1107,21 @@ async def run_albo(request: Request, req: ALBORequest):
 
         if X_Train is not None:
             X_Train = np.asarray(X_Train, dtype=np.float64)
-            if X_Train.ndim == 1: X_Train = X_Train.reshape(-1, 1)
+            if X_Train.ndim == 1:
+                X_Train = X_Train.reshape(-1, 1)
         if Y_Train is not None:
             Y_Train = np.asarray(Y_Train, dtype=np.float64)
-            if Y_Train.ndim == 1: Y_Train = Y_Train.reshape(-1, 1)
+            if Y_Train.ndim == 1:
+                Y_Train = Y_Train.reshape(-1, 1)
 
         has_test = session_state.get("Train_Test_Split", False) and X_Test is not None and len(X_Test) > 0 and Y_Test is not None and len(Y_Test) > 0
         if has_test:
             X_Test = np.asarray(X_Test, dtype=np.float64)
-            if X_Test.ndim == 1: X_Test = X_Test.reshape(-1, 1)
+            if X_Test.ndim == 1:
+                X_Test = X_Test.reshape(-1, 1)
             Y_Test = np.asarray(Y_Test, dtype=np.float64)
-            if Y_Test.ndim == 1: Y_Test = Y_Test.reshape(-1, 1)
+            if Y_Test.ndim == 1:
+                Y_Test = Y_Test.reshape(-1, 1)
 
         n_features = get_session_n_features(session_state)
 
@@ -1126,7 +1135,8 @@ async def run_albo(request: Request, req: ALBORequest):
         if req.import_available:
             if session_state.get("BO_zone_available") is not None:
                 cand = np.asarray(session_state["BO_zone_available"], dtype=np.float64)
-                if cand.ndim == 1: cand = cand.reshape(-1, 1)
+                if cand.ndim == 1:
+                    cand = cand.reshape(-1, 1)
                 if cand.shape[1] == n_features:
                     BO_zone = cand
                 else:
@@ -1151,7 +1161,8 @@ async def run_albo(request: Request, req: ALBORequest):
             if X is None or len(X) == 0:
                 raise HTTPException(status_code=400, detail="Training data not found for domain limits calculation.")
             X = np.asarray(X, dtype=np.float64)
-            if X.ndim == 1: X = X.reshape(-1, 1)
+            if X.ndim == 1:
+                X = X.reshape(-1, 1)
 
             if req.standard_plot:
                 x_min = np.array([float(np.min(X[:, e])) for e in range(n_features)]).reshape(-1, 1)
@@ -1224,9 +1235,11 @@ async def run_albo(request: Request, req: ALBORequest):
                 ax.set_facecolor('#000000')
 
                 m_color = getattr(req, "model_color", "black")
-                if m_color == "black": m_color = "#ffffff"
+                if m_color == "black":
+                    m_color = "#ffffff"
                 af_color = getattr(req, "af_color", "blue")
-                if af_color == "blue": af_color = "#3399ff"
+                if af_color == "blue":
+                    af_color = "#3399ff"
 
                 ax.plot(BO_zone[:, 0], Y_mean_flat, label="Y mean", color=m_color, linewidth=2)
                 ax.plot(BO_zone[:, 0], AF, "--", label="AF", color=af_color, linewidth=1.5)
