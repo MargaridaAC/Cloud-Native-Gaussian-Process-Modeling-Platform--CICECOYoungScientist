@@ -2,11 +2,12 @@ fastapi
 uvicorn
 python-multipart
 pydantic
-numpy
+numpy<2.0.0
 pandas
 scikit-learn
 gpflow
 tensorflow
+tf_keras
 scipy
 pytest
 httpx
