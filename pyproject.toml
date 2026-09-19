@@ -9,3 +9,5 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["original", "scratch", "venv", ".venv"]
+addopts = "-v --ignore=scratch --ignore=original --ignore=venv --ignore=.venv"
+

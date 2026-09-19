@@ -9,7 +9,9 @@ pandas
 scikit-learn
 gpflow
 tensorflow
+tensorflow-probability
 tf_keras
 scipy
 pytest
 httpx
+

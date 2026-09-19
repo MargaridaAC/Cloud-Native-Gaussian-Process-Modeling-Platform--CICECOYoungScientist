@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+env:
+  PYTHONPATH: .
+  TF_USE_LEGACY_KERAS: "1"
+  TF_ENABLE_ONEDNN_OPTS: "0"
+
 jobs:
   lint-and-test:
     name: Lint & Python Validation
@@ -20,7 +25,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
       - name: Install Dependencies
         run: |
@@ -32,12 +36,14 @@ jobs:
         run: |
           ruff check . --select E,F,W --ignore E501
 
-      - name: Run Pytest Unit Tests
-        env:
-          PYTHONPATH: .
-          TF_USE_LEGACY_KERAS: "1"
+      - name: Verify Python Server Import
         run: |
-          python -m pytest tests/ -v --tb=short
+          python -c "import server; print('>>> SERVER IMPORT SUCCESSFUL <<<')"
+
+      - name: Run Pytest Unit Tests
+        run: |
+          python -m pytest tests/ -v --tb=long -s
+
 
   docker-build:
     name: Docker Build Test
