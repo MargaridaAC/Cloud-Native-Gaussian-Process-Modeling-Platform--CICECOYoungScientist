@@ -37,7 +37,7 @@ jobs:
           PYTHONPATH: .
           TF_USE_LEGACY_KERAS: "1"
         run: |
-          python -m pytest
+          python -m pytest tests/
 
   docker-build:
     name: Docker Build Test

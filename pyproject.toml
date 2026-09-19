@@ -5,3 +5,7 @@ exclude = [
     "venv",
     ".venv",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["original", "scratch", "venv", ".venv"]
