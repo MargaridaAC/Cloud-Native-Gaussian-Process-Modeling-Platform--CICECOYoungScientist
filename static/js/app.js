@@ -85,17 +85,13 @@ function openModal(id) {
         }
     }
     
-    // Prevent plot shifting: trigger resize after container is visible
+    // Trigger rendering after container is visible
     setTimeout(() => {
         if (id === 'modalPlot') {
             renderGPPlotLimits();
-            const plotDiv = document.getElementById('gpPlotDiv');
-            if (plotDiv) Plotly.Plots.resize(plotDiv);
             renderGPPlot();
         } else if (id === 'modalALBO') {
             renderALBOLimits();
-            const plotDiv = document.getElementById('afPlotDiv');
-            if (plotDiv) Plotly.Plots.resize(plotDiv);
             renderAFPlot();
         } else if (id === 'modalPred') {
             renderPredictInputs();
@@ -507,7 +503,7 @@ function renderALBOLimits() {
     }
 }
 
-// Parity Plot Update - Purely Reactive
+// Parity Plot Update - Purely Reactive Plotly
 async function updateParityPlot() {
     const plotDiv = document.getElementById("parityPlotDiv");
     if (!plotDiv) return;
@@ -582,39 +578,41 @@ async function updateParityPlot() {
         let yPos = 0.95;
 
         const m = data.metrics;
-        if (document.getElementById("chkMAE").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Train) = ${m.MAE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
-            yPos -= 0.07;
-        }
-        if (document.getElementById("chkMAPE").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Train) = ${m.MAPE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
-            yPos -= 0.07;
-        }
-        if (document.getElementById("chkR2").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Train) = ${m.R2_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
-            yPos -= 0.07;
-        }
-        if (document.getElementById("chkRMSE").checked) {
-            annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Train) = ${m.RMSE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
-            yPos -= 0.07;
-        }
+        if (m) {
+            if (document.getElementById("chkMAE").checked && m.MAE_Train !== undefined) {
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Train) = ${m.MAE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+                yPos -= 0.07;
+            }
+            if (document.getElementById("chkMAPE").checked && m.MAPE_Train !== undefined) {
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Train) = ${m.MAPE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+                yPos -= 0.07;
+            }
+            if (document.getElementById("chkR2").checked && m.R2_Train !== undefined) {
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Train) = ${m.R2_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+                yPos -= 0.07;
+            }
+            if (document.getElementById("chkRMSE").checked && m.RMSE_Train !== undefined) {
+                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Train) = ${m.RMSE_Train.toFixed(3)}`, showarrow: false, font: { color: "red", size: 10 } });
+                yPos -= 0.07;
+            }
 
-        if (data.has_test) {
-            if (document.getElementById("chkMAE").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Test) = ${m.MAE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
-                yPos -= 0.07;
-            }
-            if (document.getElementById("chkMAPE").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Test) = ${m.MAPE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
-                yPos -= 0.07;
-            }
-            if (document.getElementById("chkR2").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Test) = ${m.R2_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
-                yPos -= 0.07;
-            }
-            if (document.getElementById("chkRMSE").checked) {
-                annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Test) = ${m.RMSE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
-                yPos -= 0.07;
+            if (data.has_test) {
+                if (document.getElementById("chkMAE").checked && m.MAE_Test !== undefined) {
+                    annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAE (Test) = ${m.MAE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                    yPos -= 0.07;
+                }
+                if (document.getElementById("chkMAPE").checked && m.MAPE_Test !== undefined) {
+                    annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `MAPE (Test) = ${m.MAPE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                    yPos -= 0.07;
+                }
+                if (document.getElementById("chkR2").checked && m.R2_Test !== undefined) {
+                    annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `R² (Test) = ${m.R2_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                    yPos -= 0.07;
+                }
+                if (document.getElementById("chkRMSE").checked && m.RMSE_Test !== undefined) {
+                    annotations.push({ x: 0.02, y: yPos, xref: "paper", yref: "paper", text: `RMSE (Test) = ${m.RMSE_Test.toFixed(3)}`, showarrow: false, font: { color: "#3399ff", size: 10 } });
+                    yPos -= 0.07;
+                }
             }
         }
 
@@ -646,8 +644,11 @@ function getColorRGBA(colorName, alpha = 0.2) {
     return colorMap[colorName.toLowerCase()] || `rgba(51, 153, 255, ${alpha})`;
 }
 
-// Render GP Plot (2D Curve or 3D Surface)
+// Render GP Plot (2D Curve or 3D Surface via Matplotlib)
 async function renderGPPlot() {
+    const gpPlotDiv = document.getElementById("gpPlotDiv");
+    if (!gpPlotDiv) return;
+
     const isStd = document.getElementById("chkPlotStandard").checked;
     const minInputs = document.querySelectorAll(".gp-min");
     const maxInputs = document.querySelectorAll(".gp-max");
@@ -664,7 +665,10 @@ async function renderGPPlot() {
     const payload = {
         standard_plot: isStd,
         n_points: parseInt(document.getElementById("selPlotPoints").value) || 1000,
-        var_ranges: varRanges
+        var_ranges: varRanges,
+        cmap: document.getElementById("selPlotCmap").value,
+        model_color: document.getElementById("selModelColor").value,
+        ic_color: document.getElementById("selICColor").value
     };
 
     try {
@@ -673,133 +677,33 @@ async function renderGPPlot() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            let msg = errorText;
+            try {
+                const jsonErr = JSON.parse(errorText);
+                msg = jsonErr.detail || errorText;
+            } catch (e) {}
+            throw new Error(msg);
+        }
+
         const data = await res.json();
 
-        if (!data.train_done) {
-            Plotly.newPlot("gpPlotDiv", [], { ...plotlyDarkLayout, title: "GRAPH" }, plotlyConfig);
+        if (!data.train_done || !data.image) {
+            gpPlotDiv.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#888; text-align:center; padding:20px;">
+                    <div style="font-size:13px; font-weight:bold; margin-bottom:6px; color:#aaa;">No Model Trained</div>
+                    <div style="font-size:11px;">Please click <strong>"Train Model"</strong> on the main window first.</div>
+                </div>
+            `;
             return;
         }
 
-        const traces = [];
-        const titles = data.axes_titles;
-        const mColor = document.getElementById("selModelColor").value;
-        const icColor = document.getElementById("selICColor").value;
-
-        if (data.n_features === 1) {
-            // 2D Curve plot: Y mean (solid)
-            traces.push({
-                x: data.x_plot,
-                y: data.y_mean,
-                mode: "lines",
-                name: "Y mean",
-                line: { color: mColor, width: 2 }
-            });
-
-            // 95% Confidence Interval Upper bound (dashed)
-            traces.push({
-                x: data.x_plot,
-                y: data.y_upper,
-                mode: "lines",
-                name: "Y I.C. 95%",
-                line: { color: icColor, dash: "dash", width: 1.5 }
-            });
-
-            // 95% Confidence Interval Lower bound (dashed + fill to upper)
-            traces.push({
-                x: data.x_plot,
-                y: data.y_lower,
-                mode: "lines",
-                name: "Y I.C. 95% (lower)",
-                showlegend: false,
-                line: { color: icColor, dash: "dash", width: 1.5 },
-                fill: "tonexty",
-                fillcolor: getColorRGBA(icColor, 0.2)
-            });
-
-            // Train Points
-            traces.push({
-                x: data.train_points.x.map(p => p[0]),
-                y: data.train_points.y,
-                mode: "markers",
-                name: "Train",
-                marker: { color: "red", size: 6, symbol: "circle" }
-            });
-
-            if (data.has_test && data.test_points) {
-                traces.push({
-                    x: data.test_points.x.map(p => p[0]),
-                    y: data.test_points.y,
-                    mode: "markers",
-                    name: "Test",
-                    marker: { color: "#3399ff", size: 6, symbol: "x" }
-                });
-            }
-
-            const layout = {
-                ...plotlyDarkLayout,
-                title: data.graph_title || "GRAPH",
-                xaxis: { ...plotlyDarkLayout.xaxis, title: titles[0] || "X" },
-                yaxis: { ...plotlyDarkLayout.yaxis, title: titles[1] || "Y" }
-            };
-
-            Plotly.newPlot("gpPlotDiv", traces, layout, plotlyConfig);
-        } else if (data.n_features === 2) {
-            // 3D Surface Plot
-            const colorscaleVal = document.getElementById("selPlotCmap").value;
-            const surfaceTrace = {
-                x: data.x1_axis,
-                y: data.x2_axis,
-                z: data.z_surface,
-                type: "surface",
-                colorscale: colorscaleVal,
-                name: "Model Surface",
-                showscale: true,
-                colorbar: { len: 0.8, title: titles[2] || "Y" }
-            };
-            traces.push(surfaceTrace);
-
-            // Train Points 3D
-            traces.push({
-                x: data.train_points.x.map(p => p[0]),
-                y: data.train_points.x.map(p => p[1]),
-                z: data.train_points.y,
-                mode: "markers",
-                type: "scatter3d",
-                name: "Train",
-                marker: { color: "red", size: 5, symbol: "circle" }
-            });
-
-            if (data.has_test && data.test_points) {
-                traces.push({
-                    x: data.test_points.x.map(p => p[0]),
-                    y: data.test_points.x.map(p => p[1]),
-                    z: data.test_points.y,
-                    mode: "markers",
-                    type: "scatter3d",
-                    name: "Test",
-                    marker: { color: "#3399ff", size: 5, symbol: "x" }
-                });
-            }
-
-            const layout = {
-                ...plotlyDarkLayout,
-                title: data.graph_title || "GRAPH",
-                scene: {
-                    xaxis: { title: titles[0] || "X1", backgroundcolor: "#000000", gridcolor: "#333" },
-                    yaxis: { title: titles[1] || "X2", backgroundcolor: "#000000", gridcolor: "#333" },
-                    zaxis: { title: titles[2] || "Y", backgroundcolor: "#000000", gridcolor: "#333" }
-                }
-            };
-
-            Plotly.newPlot("gpPlotDiv", traces, layout, plotlyConfig);
-        } else {
-            // >2 features fallback (empty graph matching original)
-            Plotly.newPlot("gpPlotDiv", [], { ...plotlyDarkLayout, title: "GRAPH" }, plotlyConfig);
-        }
-
-        Plotly.Plots.resize("gpPlotDiv");
+        gpPlotDiv.innerHTML = `<img src="${data.image}" style="width:100%; height:100%; object-fit:contain; display:block; margin:auto;" />`;
     } catch (err) {
         console.error("GP Plot error:", err);
+        gpPlotDiv.innerHTML = `<div style="color:#ff6666; padding:15px; font-size:12px; text-align:center;">Error rendering plot:<br>${err.message}</div>`;
     }
 }
 
@@ -815,8 +719,16 @@ async function runPredictY() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ x_values: xVals, confidence_level: confLevel })
         });
+        if (!res.ok) {
+            const errorText = await res.text();
+            let msg = errorText;
+            try {
+                const jsonErr = JSON.parse(errorText);
+                msg = jsonErr.detail || errorText;
+            } catch (e) {}
+            throw new Error(msg);
+        }
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Prediction failed");
 
         document.getElementById("lblPredYVal").textContent = data.pred_y;
         document.getElementById("lblCIVal").textContent = `[${data.ci_lower} , ${data.ci_upper}]`;
@@ -827,6 +739,9 @@ async function runPredictY() {
 
 // AL and BO Plot & Search
 async function renderAFPlot() {
+    const afPlotDiv = document.getElementById("afPlotDiv");
+    if (!afPlotDiv) return;
+
     const isStd = document.getElementById("chkALBOStandard").checked;
     const isAvail = document.getElementById("chkALBOAvailable").checked;
 
@@ -847,7 +762,10 @@ async function renderAFPlot() {
         standard_plot: isStd,
         import_available: isAvail,
         n_points: parseInt(document.getElementById("selALBONPoints").value) || 1000,
-        x_ranges: xRanges
+        x_ranges: xRanges,
+        cmap: document.getElementById("selALBOCmap").value,
+        model_color: document.getElementById("selALBOModelColor").value,
+        af_color: document.getElementById("selALBOAFColor").value
     };
 
     try {
@@ -856,73 +774,42 @@ async function renderAFPlot() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            let msg = errorText;
+            try {
+                const jsonErr = JSON.parse(errorText);
+                msg = jsonErr.detail || errorText;
+            } catch (e) {}
+            throw new Error(msg);
+        }
+
         const data = await res.json();
 
-        if (!res.ok) throw new Error(data.detail || "AL/BO execution failed");
-
-        const traces = [];
-        const titles = data.axes_titles;
-        const mColor = document.getElementById("selALBOModelColor").value;
-        const afColor = document.getElementById("selALBOAFColor").value;
-
-        if (data.n_features === 1) {
-            traces.push({
-                x: data.x_plot,
-                y: data.y_mean,
-                mode: "lines",
-                name: "Y mean",
-                line: { color: mColor, width: 2 }
-            });
-            traces.push({
-                x: data.x_plot,
-                y: data.af_plot,
-                mode: "lines",
-                name: "AF",
-                line: { color: afColor, dash: "dash", width: 2 }
-            });
-
-            const layout = {
-                ...plotlyDarkLayout,
-                title: data.graph_title,
-                xaxis: { ...plotlyDarkLayout.xaxis, title: titles[0] },
-                yaxis: { ...plotlyDarkLayout.yaxis, title: "A.F." }
-            };
-
-            Plotly.newPlot("afPlotDiv", traces, layout, plotlyConfig);
-        } else if (data.n_features === 2) {
-            traces.push({
-                x: data.x1_plot,
-                y: data.x2_plot,
-                z: data.af_plot,
-                type: "mesh3d",
-                colorscale: document.getElementById("selALBOCmap").value.toLowerCase(),
-                name: "A.F. Surface"
-            });
-
-            const layout = {
-                ...plotlyDarkLayout,
-                title: data.graph_title,
-                scene: {
-                    xaxis: { title: titles[0], backgroundcolor: "#000000", gridcolor: "#333" },
-                    yaxis: { title: titles[1], backgroundcolor: "#000000", gridcolor: "#333" },
-                    zaxis: { title: "A.F.", backgroundcolor: "#000000", gridcolor: "#333" }
-                }
-            };
-
-            Plotly.newPlot("afPlotDiv", traces, layout, plotlyConfig);
+        if (data.image) {
+            afPlotDiv.innerHTML = `<img src="${data.image}" style="width:100%; height:100%; object-fit:contain; display:block; margin:auto;" />`;
+        } else {
+            afPlotDiv.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#888; text-align:center; padding:20px;">
+                    <div style="font-size:13px; font-weight:bold; margin-bottom:6px; color:#aaa;">No Model Trained</div>
+                    <div style="font-size:11px;">Please click <strong>"Train Model"</strong> on the main window first.</div>
+                </div>
+            `;
         }
 
         // Update Point to Measure in results
-        const resultSpans = document.querySelectorAll(".albo-result-val");
-        data.next_point.forEach((val, idx) => {
-            if (resultSpans[idx]) {
-                resultSpans[idx].textContent = val;
-            }
-        });
-
-        Plotly.Plots.resize("afPlotDiv");
+        if (data.next_point) {
+            const resultSpans = document.querySelectorAll(".albo-result-val");
+            data.next_point.forEach((val, idx) => {
+                if (resultSpans[idx]) {
+                    resultSpans[idx].textContent = (typeof val === 'number') ? val.toFixed(4) : val;
+                }
+            });
+        }
     } catch (err) {
         console.error("AF Plot error:", err);
+        afPlotDiv.innerHTML = `<div style="color:#ff6666; padding:15px; font-size:12px; text-align:center;">Error rendering AF plot:<br>${err.message}</div>`;
     }
 }
 

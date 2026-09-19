@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -5,6 +6,11 @@ import tempfile
 import time
 import uuid
 from typing import Any
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 import gpflow
 import numpy as np
@@ -18,6 +24,25 @@ from sklearn import metrics
 from sklearn.model_selection import train_test_split
 
 app = FastAPI(title="GP Training App Web")
+
+def fig_to_base64(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", facecolor=fig.get_facecolor(), edgecolor='none', dpi=130)
+    plt.close(fig)
+    buf.seek(0)
+    encoded = base64.b64encode(buf.read()).decode("utf-8")
+    return f"data:image/png;base64,{encoded}"
+
+def get_safe_cmap(name: str | None) -> str:
+    if not name:
+        return "viridis"
+    c_lower = str(name).strip().lower()
+    try:
+        plt.get_cmap(c_lower)
+        return c_lower
+    except Exception:
+        return "viridis"
+
 
 # =============================================================================
 # HEALTH CHECK ENDPOINTS FOR ORCHESTRATION
@@ -118,8 +143,17 @@ class SessionManager:
 
         # Restore numpy arrays if saved as lists
         for key in ["X", "Y", "X_Train", "Y_Train", "X_Test", "Y_Test"]:
-            if state.get(key) is not None and isinstance(state[key], list):
-                state[key] = np.array(state[key], dtype=np.float64) if len(state[key]) > 0 else None
+            val = state.get(key)
+            if val is not None:
+                if isinstance(val, list):
+                    arr = np.array(val, dtype=np.float64) if len(val) > 0 else None
+                elif isinstance(val, np.ndarray):
+                    arr = val
+                else:
+                    arr = None
+                if arr is not None and arr.ndim == 1:
+                    arr = arr.reshape(-1, 1)
+                state[key] = arr
 
         if state.get("BO_zone_available") is not None and isinstance(state["BO_zone_available"], list):
             state["BO_zone_available"] = np.array(state["BO_zone_available"], dtype=np.float64) if len(state["BO_zone_available"]) > 0 else None
@@ -310,6 +344,9 @@ class PlotGraphRequest(BaseModel):
     standard_plot: bool = True
     n_points: int = 1000
     var_ranges: list[dict[str, float]] | None = None
+    cmap: str = "Viridis"
+    model_color: str = "black"
+    ic_color: str = "blue"
 
 class ALBORequest(BaseModel):
     af_type: str = "Std"
@@ -317,6 +354,9 @@ class ALBORequest(BaseModel):
     import_available: bool = False
     n_points: int = 1000
     x_ranges: list[dict[str, float]] | None = None
+    cmap: str = "Viridis"
+    model_color: str = "black"
+    af_color: str = "blue"
 
 class SessionSaveSchema(BaseModel):
     type_data: str | None = "Manual"
@@ -358,7 +398,24 @@ def to_serializable(val):
         return val.item()
     return val
 
+def get_session_n_features(session_state: dict[str, Any]) -> int:
+    X_Train = session_state.get("X_Train")
+    if X_Train is not None:
+        arr = np.asarray(X_Train)
+        if arr.size > 0:
+            return arr.shape[1] if arr.ndim > 1 else 1
+
+    X = session_state.get("X")
+    if X is not None:
+        arr = np.asarray(X)
+        if arr.size > 0:
+            return arr.shape[1] if arr.ndim > 1 else 1
+
+    ncol_data = session_state.get("ncol_data") or session_state.get("n_dimensions") or 2
+    return max(1, int(ncol_data) - 1)
+
 def fit_gp_model(X, Y, config, session_state: dict[str, Any]):
+    session_state.pop("BO_zone_available", None)
     var_kernel = config["kernel"]
     var_norm_label = config["norm_label"]
     var_norm_feat = config["norm_feat"]
@@ -458,20 +515,21 @@ async def get_model_info(request: Request):
     sid = SessionManager.get_session_id(request)
     session_state = SessionManager.get_session(sid)
 
+    n_features = get_session_n_features(session_state)
     X_Train = session_state.get("X_Train")
     X_Test = session_state.get("X_Test")
     n_train = len(X_Train) if X_Train is not None else 0
     n_test = len(X_Test) if X_Test is not None else 0
 
     return {
-        "train_done": session_state["train_done"],
-        "type_data": session_state["type_data"],
-        "ncol_data": session_state["ncol_data"],
-        "n_features": max(1, session_state["ncol_data"] - 1),
-        "axes_titles": session_state["Axes_titles"],
-        "graph_title": session_state["Graph_title"],
+        "train_done": session_state.get("train_done", False),
+        "type_data": session_state.get("type_data", "Manual"),
+        "ncol_data": n_features + 1,
+        "n_features": n_features,
+        "axes_titles": session_state.get("Axes_titles", ["X", "Y"]),
+        "graph_title": session_state.get("Graph_title", ""),
         "var_bounds": get_var_bounds(session_state),
-        "num_params": session_state["num_params"],
+        "num_params": session_state.get("num_params", 0),
         "n_train": n_train,
         "n_test": n_test,
         "save_path": session_state.get("Save_path")
@@ -547,11 +605,12 @@ async def confirm_available_data(request: Request, req: AvailableDataConfirm):
     if len(selected_cols) == 0:
         raise HTTPException(status_code=400, detail="Select at least 1 feature column for search.")
 
-    expected_n_feat = session_state.get("n_dimensions", 2) - 1
+    expected_n_feat = get_session_n_features(session_state)
+
     if len(selected_cols) != expected_n_feat:
         raise HTTPException(
             status_code=400,
-            detail=f"The trained model expects {expected_n_feat} feature(s), but you selected {len(selected_cols)} feature column(s)."
+            detail=f"The trained model expects {expected_n_feat} feature column(s), but you selected {len(selected_cols)} feature column(s)."
         )
 
     BO_zone = df[selected_cols].dropna().values.astype(float)
@@ -581,6 +640,8 @@ async def train_manual(request: Request, req: ManualTrainData):
     session_state["type_data"] = "Manual"
     session_state["Axes_titles"] = ["X", "Y"]
     session_state["Graph_title"] = "Manual Points Graph (for testing purposes)"
+    session_state["ncol_data"] = 2
+    session_state["n_dimensions"] = 2
 
     config = {
         "kernel": req.kernel,
@@ -634,6 +695,8 @@ async def train_csv(request: Request, req: CSVTrainData):
 
     session_state["type_data"] = "Import"
     session_state["Axes_titles"] = Axes_titles
+    session_state["ncol_data"] = int(ncol_data)
+    session_state["n_dimensions"] = int(ncol_data)
 
     config = {
         "kernel": req.kernel,
@@ -659,7 +722,14 @@ async def train_csv(request: Request, req: CSVTrainData):
     }
 
 @app.get("/api/parity")
-async def get_parity_data(request: Request):
+async def get_parity_data(
+    request: Request,
+    mae: bool = False,
+    mape: bool = False,
+    r2: bool = False,
+    rmse: bool = False,
+    error_bars: bool = False
+):
     sid = SessionManager.get_session_id(request)
     session_state = SessionManager.get_session(sid)
 
@@ -685,20 +755,27 @@ async def get_parity_data(request: Request):
     Y_Train_pred = Normalization(np.array(Y_Train_pred_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True)[0]
     Y_Train_pred_std = Normalization(np.array(Y_Train_pred_std_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True, var={"bol": True, "Y_N": Y_Train_pred_N})[0]
 
-    metrics_dict = {
-        "R2_Train": float(metrics.r2_score(Y_Train, Y_Train_pred)),
-        "RMSE_Train": float(metrics.root_mean_squared_error(Y_Train, Y_Train_pred)),
-        "MAE_Train": float(metrics.mean_absolute_error(Y_Train, Y_Train_pred)),
-        "MAPE_Train": float(metrics.mean_absolute_percentage_error(Y_Train, Y_Train_pred))
-    }
-
-    test_data = None
+    Y_Test_pred = None
+    Y_Test_pred_std = None
     if has_test:
         X_Test_N, _ = Normalization(X_Test, var_norm_feat, parms=parms_X, reverse=False)
         Y_Test_pred_N, Y_Test_pred_std_N = model.predict_y(X_Test_N, full_cov=False)
         Y_Test_pred = Normalization(np.array(Y_Test_pred_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True)[0]
         Y_Test_pred_std = Normalization(np.array(Y_Test_pred_std_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True, var={"bol": True, "Y_N": Y_Test_pred_N})[0]
 
+    R2_Train = float(metrics.r2_score(Y_Train, Y_Train_pred))
+    RMSE_Train = float(metrics.root_mean_squared_error(Y_Train, Y_Train_pred))
+    MAE_Train = float(metrics.mean_absolute_error(Y_Train, Y_Train_pred))
+    MAPE_Train = float(metrics.mean_absolute_percentage_error(Y_Train, Y_Train_pred))
+
+    metrics_dict = {
+        "R2_Train": R2_Train,
+        "RMSE_Train": RMSE_Train,
+        "MAE_Train": MAE_Train,
+        "MAPE_Train": MAPE_Train
+    }
+
+    if has_test and Y_Test_pred is not None:
         metrics_dict.update({
             "R2_Test": float(metrics.r2_score(Y_Test, Y_Test_pred)),
             "RMSE_Test": float(metrics.root_mean_squared_error(Y_Test, Y_Test_pred)),
@@ -706,14 +783,82 @@ async def get_parity_data(request: Request):
             "MAPE_Test": float(metrics.mean_absolute_percentage_error(Y_Test, Y_Test_pred))
         })
 
+    with plt.style.context('dark_background'):
+        fig, ax = plt.subplots(figsize=(6, 4.2), dpi=120)
+        fig.patch.set_facecolor('#000000')
+        ax.set_facecolor('#000000')
+
+        ax.scatter(Y_Train, Y_Train_pred, s=25, facecolors='none', edgecolors='red', label="Train", zorder=3)
+        if has_test and Y_Test_pred is not None:
+            ax.scatter(Y_Test, Y_Test_pred, color="#3399ff", s=25, marker="x", label="Test", zorder=3)
+
+        y_min = float(min(Y.flatten()))
+        y_max = float(max(Y.flatten()))
+        ax.plot((y_min, y_max), (y_min, y_max), color='#888888', linestyle='--', linewidth=1, zorder=2)
+
+        ax.legend(fontsize=8, loc='lower right', facecolor='#1a1a1a', edgecolor='#444444')
+
+        text_pos = 0.93
+        if mae:
+            ax.text(0.02, text_pos, f'MAE (Train) = {MAE_Train:.3f}', transform=ax.transAxes, color='r', fontsize=8)
+            text_pos -= 0.07
+        if mape:
+            ax.text(0.02, text_pos, f'MAPE (Train) = {MAPE_Train:.3f}', transform=ax.transAxes, color='r', fontsize=8)
+            text_pos -= 0.07
+        if r2:
+            ax.text(0.02, text_pos, f'R² (Train) = {R2_Train:.3f}', transform=ax.transAxes, color='r', fontsize=8)
+            text_pos -= 0.07
+        if rmse:
+            ax.text(0.02, text_pos, f'RMSE (Train) = {RMSE_Train:.3f}', transform=ax.transAxes, color='r', fontsize=8)
+            text_pos -= 0.07
+
+        if has_test and Y_Test_pred is not None:
+            MAE_Test = metrics_dict["MAE_Test"]
+            MAPE_Test = metrics_dict["MAPE_Test"]
+            R2_Test = metrics_dict["R2_Test"]
+            RMSE_Test = metrics_dict["RMSE_Test"]
+            if mae:
+                ax.text(0.02, text_pos, f'MAE (Test) = {MAE_Test:.3f}', transform=ax.transAxes, color='#3399ff', fontsize=8)
+                text_pos -= 0.07
+            if mape:
+                ax.text(0.02, text_pos, f'MAPE (Test) = {MAPE_Test:.3f}', transform=ax.transAxes, color='#3399ff', fontsize=8)
+                text_pos -= 0.07
+            if r2:
+                ax.text(0.02, text_pos, f'R² (Test) = {R2_Test:.3f}', transform=ax.transAxes, color='#3399ff', fontsize=8)
+                text_pos -= 0.07
+            if rmse:
+                ax.text(0.02, text_pos, f'RMSE (Test) = {RMSE_Test:.3f}', transform=ax.transAxes, color='#3399ff', fontsize=8)
+                text_pos -= 0.07
+
+        if error_bars:
+            ax.errorbar(
+                Y_Train.flatten(), Y_Train_pred.flatten(),
+                yerr=np.sqrt(np.maximum(0, Y_Train_pred_std.flatten())),
+                fmt='o', linestyle='none', capsize=3, color='#aaaaaa', ecolor='#aaaaaa', markersize=1, zorder=2
+            )
+            if has_test and Y_Test_pred is not None:
+                ax.errorbar(
+                    Y_Test.flatten(), Y_Test_pred.flatten(),
+                    yerr=np.sqrt(np.maximum(0, Y_Test_pred_std.flatten())),
+                    fmt='o', linestyle='none', capsize=3, color='#3399ff', ecolor='#3399ff', markersize=1, zorder=2
+                )
+
+        ax.grid(True, color='#2a2a2a', linestyle='-', linewidth=0.5)
+        ax.set_title("Parity plot", color='#ffffff', fontsize=11, fontweight='bold')
+        ax.set_xlabel(f"Exp. {Axes_titles[-1]}", color='#ffffff', fontsize=9)
+        ax.set_ylabel(f"Pred. {Axes_titles[-1]}", color='#ffffff', fontsize=9)
+        ax.tick_params(colors='#ffffff', labelsize=8)
+        fig.tight_layout()
+
+        img_b64 = fig_to_base64(fig)
+
+    test_data = None
+    if has_test and Y_Test_pred is not None:
         test_data = {
             "y_exp": Y_Test.flatten().tolist(),
             "y_pred": Y_Test_pred.flatten().tolist(),
             "y_std": np.sqrt(np.maximum(0, Y_Test_pred_std.flatten())).tolist()
         }
-
-    y_min = float(min(Y.flatten()))
-    y_max = float(max(Y.flatten()))
 
     return {
         "train_done": True,
@@ -727,106 +872,175 @@ async def get_parity_data(request: Request):
         "test": test_data,
         "line_min": y_min,
         "line_max": y_max,
-        "metrics": metrics_dict
+        "metrics": metrics_dict,
+        "image": img_b64
     }
 
 @app.post("/api/plot-graph")
 async def get_plot_graph(request: Request, req: PlotGraphRequest):
-    sid = SessionManager.get_session_id(request)
-    session_state = SessionManager.get_session(sid)
+    try:
+        sid = SessionManager.get_session_id(request)
+        session_state = SessionManager.get_session(sid)
 
-    if not session_state["train_done"] or session_state.get("model") is None:
-        return {"train_done": False}
+        if not session_state.get("train_done") or session_state.get("model") is None:
+            return {"train_done": False}
 
-    model = session_state["model"]
-    parms_X = session_state["parms_X"]
-    parms_Y = session_state["parms_Y"]
-    X_Train = session_state["X_Train"]
-    Y_Train = session_state["Y_Train"]
-    X_Test = session_state["X_Test"]
-    Y_Test = session_state["Y_Test"]
-    X = session_state["X"]
-    ncol_data = session_state["ncol_data"]
-    var_norm_label = session_state["var_norm_label"]
-    var_norm_feat = session_state["var_norm_feat"]
-    Axes_titles = session_state["Axes_titles"]
-    Graph_title = session_state["Graph_title"]
-    has_test = session_state["Train_Test_Split"] and X_Test is not None and len(X_Test) > 0
+        model = session_state["model"]
+        parms_X = session_state["parms_X"]
+        parms_Y = session_state["parms_Y"]
+        X_Train = session_state.get("X_Train")
+        Y_Train = session_state.get("Y_Train")
+        X_Test = session_state.get("X_Test")
+        Y_Test = session_state.get("Y_Test")
+        X = session_state.get("X")
+        if X is None or len(X) == 0:
+            X = session_state.get("X_Train")
+        if X is None or len(X) == 0 or X_Train is None or Y_Train is None:
+            return {"train_done": False}
 
-    n_features = ncol_data - 1
-    N_Points = round(int(req.n_points) ** (1 / max(1, n_features)))
+        X = np.asarray(X, dtype=np.float64)
+        if X.ndim == 1: X = X.reshape(-1, 1)
+        X_Train = np.asarray(X_Train, dtype=np.float64)
+        if X_Train.ndim == 1: X_Train = X_Train.reshape(-1, 1)
+        Y_Train = np.asarray(Y_Train, dtype=np.float64)
+        if Y_Train.ndim == 1: Y_Train = Y_Train.reshape(-1, 1)
 
-    X_Plot_base = np.zeros((N_Points, n_features))
+        has_test = session_state.get("Train_Test_Split", False) and X_Test is not None and len(X_Test) > 0 and Y_Test is not None and len(Y_Test) > 0
+        if has_test:
+            X_Test = np.asarray(X_Test, dtype=np.float64)
+            if X_Test.ndim == 1: X_Test = X_Test.reshape(-1, 1)
+            Y_Test = np.asarray(Y_Test, dtype=np.float64)
+            if Y_Test.ndim == 1: Y_Test = Y_Test.reshape(-1, 1)
 
-    if req.standard_plot:
-        for n in range(n_features):
-            varRange = np.linspace(X[:, n].min(), X[:, n].max(), N_Points)
-            X_Plot_base[:, n] = varRange.copy()
-    else:
-        if req.var_ranges and len(req.var_ranges) >= n_features:
+        ncol_data = session_state.get("ncol_data", X.shape[1] + 1)
+        var_norm_label = session_state.get("var_norm_label", "None")
+        var_norm_feat = session_state.get("var_norm_feat", "None")
+        Axes_titles = session_state.get("Axes_titles", ["X", "Y"])
+        Graph_title = session_state.get("Graph_title", "GRAPH")
+
+        n_features = get_session_n_features(session_state)
+        N_Points = round(int(req.n_points) ** (1 / max(1, n_features)))
+
+        X_Plot_base = np.zeros((N_Points, n_features))
+
+        if req.standard_plot:
             for n in range(n_features):
-                v_min = float(req.var_ranges[n]["min"])
-                v_max = float(req.var_ranges[n]["max"])
-                varRange = np.linspace(v_min, v_max, N_Points)
+                varRange = np.linspace(float(X[:, n].min()), float(X[:, n].max()), N_Points)
                 X_Plot_base[:, n] = varRange.copy()
         else:
-            for n in range(n_features):
-                varRange = np.linspace(X[:, n].min(), X[:, n].max(), N_Points)
-                X_Plot_base[:, n] = varRange.copy()
+            if req.var_ranges and len(req.var_ranges) >= n_features:
+                Plot_min = np.array([float(r["min"]) for r in req.var_ranges[:n_features]]).reshape(-1, 1)
+                Plot_max = np.array([float(r["max"]) for r in req.var_ranges[:n_features]]).reshape(-1, 1)
+                Plot_Limits = np.hstack((Plot_min, Plot_max))
+                for n in range(n_features):
+                    varRange = np.linspace(float(Plot_Limits[n, :].min()), float(Plot_Limits[n, :].max()), N_Points)
+                    X_Plot_base[:, n] = varRange.copy()
+            else:
+                for n in range(n_features):
+                    varRange = np.linspace(float(X[:, n].min()), float(X[:, n].max()), N_Points)
+                    X_Plot_base[:, n] = varRange.copy()
 
-    result = {
-        "train_done": True,
-        "n_features": n_features,
-        "axes_titles": Axes_titles,
-        "graph_title": Graph_title,
-        "has_test": has_test,
-        "train_points": {
-            "x": X_Train.tolist(),
-            "y": Y_Train.flatten().tolist()
-        },
-        "test_points": {
-            "x": X_Test.tolist(),
-            "y": Y_Test.flatten().tolist()
-        } if has_test else None
-    }
+        X_Plot_grid = np.array(np.meshgrid(*[X_Plot_base[:, i] for i in range(n_features)])).T.reshape(-1, n_features)
+        X_Plot_N, _ = Normalization(X_Plot_grid, var_norm_feat, parms=parms_X, reverse=False)
 
-    if n_features == 1:
-        x_plot = X_Plot_base[:, 0]
-        X_Plot_N, _ = Normalization(x_plot.reshape(-1, 1), var_norm_feat, parms=parms_X, reverse=False)
         Y_mean_N, Y_var_N = model.predict_y(X_Plot_N, full_cov=False)
 
         Y_mean = Normalization(np.array(Y_mean_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True)[0]
         Y_var = Normalization(np.array(Y_var_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True, var={"bol": True, "Y_N": Y_mean_N})[0]
 
-        Y_Upper = Y_mean.flatten() + 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))
-        Y_Lower = Y_mean.flatten() - 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))
+        with plt.style.context('dark_background'):
+            fig = plt.figure(figsize=(6, 4.2), dpi=120)
+            fig.patch.set_facecolor('#000000')
 
-        result.update({
-            "x_plot": x_plot.tolist(),
-            "y_mean": Y_mean.flatten().tolist(),
-            "y_upper": Y_Upper.tolist(),
-            "y_lower": Y_Lower.tolist()
-        })
-    elif n_features == 2:
-        x1_axis = X_Plot_base[:, 0]
-        x2_axis = X_Plot_base[:, 1]
+            if n_features == 1:
+                ax = fig.add_subplot(111)
+                ax.set_facecolor('#000000')
+                Y_Upper = Y_mean.flatten() + 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))
+                Y_Lower = Y_mean.flatten() - 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))
 
-        X1_grid, X2_grid = np.meshgrid(x1_axis, x2_axis)
-        X_Plot = np.column_stack([X1_grid.ravel(), X2_grid.ravel()])
+                m_color = getattr(req, "model_color", "black")
+                if m_color == "black": m_color = "#ffffff"
+                ic_color = getattr(req, "ic_color", "blue")
+                if ic_color == "blue": ic_color = "#3399ff"
 
-        X_Plot_N, _ = Normalization(X_Plot, var_norm_feat, parms=parms_X, reverse=False)
-        Y_mean_N, _ = model.predict_y(X_Plot_N, full_cov=False)
+                ax.plot(X_Plot_grid[:, 0], Y_mean.flatten(), label="Y mean", color=m_color, linewidth=2)
+                ax.plot(X_Plot_grid[:, 0], Y_Upper, "--", label="Y I.C. 95%", color=ic_color, linewidth=1.5)
+                ax.plot(X_Plot_grid[:, 0], Y_Lower, "--", color=ic_color, linewidth=1.5)
+                ax.fill_between(X_Plot_grid[:, 0], Y_Lower, Y_Upper, color=ic_color, alpha=0.15)
 
-        Y_mean = Normalization(np.array(Y_mean_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True)[0]
-        Z_grid = Y_mean.reshape(N_Points, N_Points)
+                ax.plot(X_Train[:, 0], Y_Train.flatten(), "o", label="Train", color="red", markersize=5)
+                if has_test and X_Test is not None and Y_Test is not None:
+                    ax.plot(X_Test[:, 0], Y_Test.flatten(), "o", label="Test", color="#3399ff", markersize=5)
 
-        result.update({
-            "x1_axis": x1_axis.tolist(),
-            "x2_axis": x2_axis.tolist(),
-            "z_surface": Z_grid.tolist()
-        })
+                ax.legend(fontsize=8, facecolor='#1a1a1a', edgecolor='#444444')
+                ax.grid(True, color='#2a2a2a')
+                ax.set_title(Graph_title, color='#ffffff', fontsize=11, fontweight='bold')
+                ax.set_xlabel(Axes_titles[0] if len(Axes_titles) > 0 else "X", color='#ffffff', fontsize=9)
+                ax.set_ylabel(Axes_titles[1] if len(Axes_titles) > 1 else "Y", color='#ffffff', fontsize=9)
+                ax.tick_params(colors='#ffffff', labelsize=8)
 
-    return result
+            elif n_features == 2:
+                ax = fig.add_subplot(111, projection='3d', computed_zorder=False)
+                ax.set_facecolor('#000000')
+                cmap_colour = get_safe_cmap(getattr(req, "cmap", "viridis"))
+
+                try:
+                    ax.plot_trisurf(X_Plot_grid[:, 0], X_Plot_grid[:, 1], Y_mean.flatten(), cmap=cmap_colour)
+                except Exception:
+                    ax.scatter(X_Plot_grid[:, 0], X_Plot_grid[:, 1], Y_mean.flatten(), c=Y_mean.flatten(), cmap=cmap_colour, s=15)
+
+                ax.view_init(elev=15, azim=310)
+
+                ax.plot(X_Train[:, 0], X_Train[:, 1], Y_Train.flatten(), "o", color="red", zorder=4.6, markersize=4, label="Train")
+                if has_test and X_Test is not None and Y_Test is not None:
+                    ax.plot(X_Test[:, 0], X_Test[:, 1], Y_Test.flatten(), "o", color="#3399ff", zorder=4.6, markersize=4, label="Test")
+
+                ax.set_title(Graph_title, color='#ffffff', fontsize=11, fontweight='bold')
+                ax.set_xlabel(Axes_titles[0] if len(Axes_titles) > 0 else "X1", color='#ffffff', fontsize=8)
+                ax.set_ylabel(Axes_titles[1] if len(Axes_titles) > 1 else "X2", color='#ffffff', fontsize=8)
+                ax.set_zlabel(Axes_titles[2] if len(Axes_titles) > 2 else "Y", color='#ffffff', fontsize=8)
+                ax.tick_params(colors='#ffffff', labelsize=7)
+            else:
+                ax = fig.add_subplot(111)
+                ax.set_facecolor('#000000')
+                ax.set_title("GRAPH", color='#ffffff')
+                ax.set_xlabel("X", color='#ffffff')
+                ax.set_ylabel("Y", color='#ffffff')
+
+            fig.tight_layout()
+            img_b64 = fig_to_base64(fig)
+
+        result = {
+            "train_done": True,
+            "n_features": n_features,
+            "axes_titles": Axes_titles,
+            "graph_title": Graph_title,
+            "has_test": has_test,
+            "image": img_b64
+        }
+
+        if n_features == 1:
+            result.update({
+                "x_plot": X_Plot_grid[:, 0].tolist(),
+                "y_mean": Y_mean.flatten().tolist(),
+                "y_upper": (Y_mean.flatten() + 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))).tolist(),
+                "y_lower": (Y_mean.flatten() - 1.96 * np.sqrt(np.maximum(0, Y_var.flatten()))).tolist()
+            })
+        elif n_features == 2:
+            x1_axis = X_Plot_base[:, 0]
+            x2_axis = X_Plot_base[:, 1]
+            Z_grid = Y_mean.reshape(N_Points, N_Points)
+            result.update({
+                "x1_axis": x1_axis.tolist(),
+                "x2_axis": x2_axis.tolist(),
+                "z_surface": Z_grid.tolist()
+            })
+
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Plot Error: {str(e)}")
 
 @app.post("/api/predict-y")
 async def predict_y(request: Request, req: PredictYRequest):
@@ -868,113 +1082,227 @@ async def predict_y(request: Request, req: PredictYRequest):
 
 @app.post("/api/albo")
 async def run_albo(request: Request, req: ALBORequest):
-    sid = SessionManager.get_session_id(request)
-    session_state = SessionManager.get_session(sid)
+    try:
+        sid = SessionManager.get_session_id(request)
+        session_state = SessionManager.get_session(sid)
 
-    if not session_state["train_done"] or session_state.get("model") is None:
-        raise HTTPException(status_code=400, detail="Model is not trained yet.")
+        if not session_state.get("train_done") or session_state.get("model") is None:
+            raise HTTPException(status_code=400, detail="Model is not trained yet.")
 
-    model = session_state["model"]
-    parms_X = session_state["parms_X"]
-    parms_Y = session_state["parms_Y"]
-    X = session_state["X"]
-    ncol_data = session_state["ncol_data"]
-    var_norm_label = session_state["var_norm_label"]
-    var_norm_feat = session_state["var_norm_feat"]
-    Axes_titles = session_state["Axes_titles"]
-    Graph_title = session_state["Graph_title"]
+        model = session_state["model"]
+        parms_X = session_state["parms_X"]
+        parms_Y = session_state["parms_Y"]
+        X_Train = session_state.get("X_Train")
+        Y_Train = session_state.get("Y_Train")
+        X_Test = session_state.get("X_Test")
+        Y_Test = session_state.get("Y_Test")
+        X = session_state.get("X")
+        if X is None or len(X) == 0:
+            X = session_state.get("X_Train")
 
-    n_features = ncol_data - 1
+        if X_Train is not None:
+            X_Train = np.asarray(X_Train, dtype=np.float64)
+            if X_Train.ndim == 1: X_Train = X_Train.reshape(-1, 1)
+        if Y_Train is not None:
+            Y_Train = np.asarray(Y_Train, dtype=np.float64)
+            if Y_Train.ndim == 1: Y_Train = Y_Train.reshape(-1, 1)
 
-    if not req.import_available:
-        if req.standard_plot:
-            x_min = np.array([np.min(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
-            x_max = np.array([np.max(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
+        has_test = session_state.get("Train_Test_Split", False) and X_Test is not None and len(X_Test) > 0 and Y_Test is not None and len(Y_Test) > 0
+        if has_test:
+            X_Test = np.asarray(X_Test, dtype=np.float64)
+            if X_Test.ndim == 1: X_Test = X_Test.reshape(-1, 1)
+            Y_Test = np.asarray(Y_Test, dtype=np.float64)
+            if Y_Test.ndim == 1: Y_Test = Y_Test.reshape(-1, 1)
+
+        n_features = get_session_n_features(session_state)
+
+        var_norm_label = session_state.get("var_norm_label", "None")
+        var_norm_feat = session_state.get("var_norm_feat", "None")
+        Axes_titles = session_state.get("Axes_titles", ["X", "Y"])
+        Graph_title = session_state.get("Graph_title", "GRAPH")
+
+        BO_zone = None
+
+        if req.import_available:
+            if session_state.get("BO_zone_available") is not None:
+                cand = np.asarray(session_state["BO_zone_available"], dtype=np.float64)
+                if cand.ndim == 1: cand = cand.reshape(-1, 1)
+                if cand.shape[1] == n_features:
+                    BO_zone = cand
+                else:
+                    session_state.pop("BO_zone_available", None)
+
+            if BO_zone is None:
+                if session_state.get("df_available") is not None:
+                    df = session_state["df_available"]
+                    if df.shape[1] >= n_features:
+                        BO_zone = df.iloc[:, :n_features].values.astype(float)
+                elif session_state.get("df_full") is not None:
+                    df = session_state["df_full"]
+                    if df.shape[1] >= n_features:
+                        BO_zone = df.iloc[:, :n_features].values.astype(float)
+
+            if BO_zone is None or BO_zone.shape[1] != n_features:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"The trained model expects {n_features} feature column(s), but no matching search dataset was provided. Please click 'Available Data' to select matching candidate columns."
+                )
         else:
-            if req.x_ranges and len(req.x_ranges) >= n_features:
-                x_min = np.array([float(req.x_ranges[e]["min"]) for e in range(n_features)]).reshape(-1, 1)
-                x_max = np.array([float(req.x_ranges[e]["max"]) for e in range(n_features)]).reshape(-1, 1)
+            if X is None or len(X) == 0:
+                raise HTTPException(status_code=400, detail="Training data not found for domain limits calculation.")
+            X = np.asarray(X, dtype=np.float64)
+            if X.ndim == 1: X = X.reshape(-1, 1)
+
+            if req.standard_plot:
+                x_min = np.array([float(np.min(X[:, e])) for e in range(n_features)]).reshape(-1, 1)
+                x_max = np.array([float(np.max(X[:, e])) for e in range(n_features)]).reshape(-1, 1)
             else:
-                x_min = np.array([np.min(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
-                x_max = np.array([np.max(X[:, e]) for e in range(n_features)]).reshape(-1, 1)
+                if req.x_ranges and len(req.x_ranges) >= n_features:
+                    x_min = np.array([float(req.x_ranges[e]["min"]) for e in range(n_features)]).reshape(-1, 1)
+                    x_max = np.array([float(req.x_ranges[e]["max"]) for e in range(n_features)]).reshape(-1, 1)
+                else:
+                    x_min = np.array([float(np.min(X[:, e])) for e in range(n_features)]).reshape(-1, 1)
+                    x_max = np.array([float(np.max(X[:, e])) for e in range(n_features)]).reshape(-1, 1)
 
-        N_Points = round(int(req.n_points) ** (1 / max(1, n_features)))
-        BO_zone_base = np.zeros((N_Points, n_features))
+            N_Points = round(int(req.n_points) ** (1 / max(1, n_features)))
+            BO_zone_base = np.zeros((N_Points, n_features))
 
-        for n in range(n_features):
-            varRange = np.linspace(float(x_min[n]), float(x_max[n]), N_Points)
-            BO_zone_base[:, n] = varRange.copy()
+            for n in range(n_features):
+                varRange = np.linspace(float(x_min[n]), float(x_max[n]), N_Points)
+                BO_zone_base[:, n] = varRange.copy()
 
-        if n_features == 1:
-            BO_zone = BO_zone_base
-        else:
             BO_zone = np.array(np.meshgrid(*[BO_zone_base[:, i] for i in range(n_features)])).T.reshape(-1, n_features)
 
+        BO_zone = np.asarray(BO_zone, dtype=np.float64)
+        if BO_zone.ndim == 1:
+            BO_zone = BO_zone.reshape(-1, 1)
+
+        if BO_zone.shape[1] != n_features:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The trained model expects {n_features} feature column(s), but the search dataset has {BO_zone.shape[1]} column(s). Please confirm available data columns."
+            )
+
         BO_zone_N, _ = Normalization(BO_zone, var_norm_feat, parms=parms_X, reverse=False)
-    else:
-        if session_state.get("BO_zone_available") is not None:
-            BO_zone = session_state["BO_zone_available"]
-        elif session_state.get("df_full") is not None:
-            df = session_state["df_full"]
-            BO_zone = df.iloc[:, :n_features].values.astype(float)
+
+        Y_mean_N, Y_var_N = model.predict_y(BO_zone_N, full_cov=False)
+
+        Y_mean = Normalization(np.array(Y_mean_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True)[0]
+        Y_var = Normalization(np.array(Y_var_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True, var={"bol": True, "Y_N": Y_mean_N})[0]
+
+        Y_mean_flat = Y_mean.flatten()
+        Y_var_flat = np.maximum(1e-12, Y_var.flatten())
+        y_max_observed = float(np.max(Y_mean_flat))
+
+        var_AF = req.af_type
+        if var_AF == "PI":
+            AF = norm.cdf((Y_mean_flat - y_max_observed) / Y_var_flat, 0, 1)
+        elif var_AF == "EI":
+            diff = Y_mean_flat - y_max_observed
+            AF = diff * norm.cdf(diff / Y_var_flat, 0, 1) + Y_var_flat * norm.pdf(diff / Y_var_flat, 0, 1)
+        elif var_AF == "UCB":
+            lamda = 1.0
+            AF = Y_mean_flat + lamda * Y_var_flat
+        elif var_AF == "Std":
+            AF = np.sqrt(Y_var_flat)
+        elif var_AF == "Std/Mean":
+            mean_safe = np.where(Y_mean_flat == 0, 1e-12, Y_mean_flat)
+            AF = np.sqrt(Y_var_flat) / mean_safe
         else:
-            raise HTTPException(status_code=400, detail="No available dataset uploaded for search zone.")
+            AF = np.sqrt(Y_var_flat)
 
-        BO_zone_N, _ = Normalization(BO_zone, var_norm_feat, parms=parms_X, reverse=False)
+        max_AF_val = float(np.max(AF))
+        idx_max = int(np.argmax(AF))
+        next_point = BO_zone[idx_max].tolist()
 
-    Y_mean_N, Y_var_N = model.predict_y(BO_zone_N, full_cov=False)
+        with plt.style.context('dark_background'):
+            fig = plt.figure(figsize=(6, 4.2), dpi=120)
+            fig.patch.set_facecolor('#000000')
 
-    Y_mean = Normalization(np.array(Y_mean_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True)[0]
-    Y_var = Normalization(np.array(Y_var_N).reshape(-1, 1), var_norm_label, parms=parms_Y, reverse=True, var={"bol": True, "Y_N": Y_mean_N})[0]
+            if n_features == 1:
+                ax = fig.add_subplot(111)
+                ax.set_facecolor('#000000')
 
-    Y_mean_flat = Y_mean.flatten()
-    Y_var_flat = np.maximum(1e-12, Y_var.flatten())
-    y_max_observed = float(np.max(Y_mean_flat))
+                m_color = getattr(req, "model_color", "black")
+                if m_color == "black": m_color = "#ffffff"
+                af_color = getattr(req, "af_color", "blue")
+                if af_color == "blue": af_color = "#3399ff"
 
-    var_AF = req.af_type
-    if var_AF == "PI":
-        AF = norm.cdf((Y_mean_flat - y_max_observed) / Y_var_flat, 0, 1)
-    elif var_AF == "EI":
-        diff = Y_mean_flat - y_max_observed
-        AF = diff * norm.cdf(diff / Y_var_flat, 0, 1) + Y_var_flat * norm.pdf(diff / Y_var_flat, 0, 1)
-    elif var_AF == "UCB":
-        lamda = 1.0
-        AF = Y_mean_flat + lamda * Y_var_flat
-    elif var_AF == "Std":
-        AF = np.sqrt(Y_var_flat)
-    elif var_AF == "Std/Mean":
-        mean_safe = np.where(Y_mean_flat == 0, 1e-12, Y_mean_flat)
-        AF = np.sqrt(Y_var_flat) / mean_safe
-    else:
-        AF = np.sqrt(Y_var_flat)
+                ax.plot(BO_zone[:, 0], Y_mean_flat, label="Y mean", color=m_color, linewidth=2)
+                ax.plot(BO_zone[:, 0], AF, "--", label="AF", color=af_color, linewidth=1.5)
+                if X_Train is not None and Y_Train is not None:
+                    ax.plot(X_Train[:, 0], Y_Train.flatten(), "o", label="Train", color="red", markersize=5)
+                if has_test and X_Test is not None and Y_Test is not None:
+                    ax.plot(X_Test[:, 0], Y_Test.flatten(), "o", label="Test", color="#3399ff", markersize=5)
 
-    max_AF_val = float(np.max(AF))
-    idx_max = int(np.argmax(AF))
-    next_point = BO_zone[idx_max].tolist()
+                ax.legend(fontsize=8, facecolor='#1a1a1a', edgecolor='#444444')
+                ax.grid(True, color='#2a2a2a')
+                ax.set_title(Graph_title, color='#ffffff', fontsize=11, fontweight='bold')
+                ax.set_xlabel(Axes_titles[0] if len(Axes_titles) > 0 else "X", color='#ffffff', fontsize=9)
+                ax.set_ylabel("A.F.", color='#ffffff', fontsize=9)
+                ax.tick_params(colors='#ffffff', labelsize=8)
 
-    result = {
-        "af_type": var_AF,
-        "max_af": round(max_AF_val, 4),
-        "next_point": [round(p, 3) for p in next_point],
-        "n_features": n_features,
-        "axes_titles": Axes_titles,
-        "graph_title": Graph_title
-    }
+            elif n_features == 2:
+                ax = fig.add_subplot(111, projection='3d', computed_zorder=False)
+                ax.set_facecolor('#000000')
+                cmap_colour = get_safe_cmap(getattr(req, "cmap", "viridis"))
 
-    if n_features == 1:
-        result.update({
-            "x_plot": BO_zone.flatten().tolist(),
-            "y_mean": Y_mean_flat.tolist(),
-            "af_plot": AF.tolist()
-        })
-    elif n_features == 2:
-        result.update({
-            "x1_plot": BO_zone[:, 0].tolist(),
-            "x2_plot": BO_zone[:, 1].tolist(),
-            "af_plot": AF.tolist()
-        })
+                try:
+                    ax.plot_trisurf(BO_zone[:, 0], BO_zone[:, 1], AF.reshape(-1,), cmap=cmap_colour)
+                except Exception:
+                    ax.scatter(BO_zone[:, 0], BO_zone[:, 1], AF.reshape(-1,), c=AF.reshape(-1,), cmap=cmap_colour, s=20)
 
-    return result
+                ax.view_init(elev=15, azim=310)
+
+                if X_Train is not None and Y_Train is not None:
+                    ax.plot(X_Train[:, 0], X_Train[:, 1], Y_Train.flatten(), "o", color="red", zorder=4.6, markersize=4, label="Train")
+                if has_test and X_Test is not None and Y_Test is not None:
+                    ax.plot(X_Test[:, 0], X_Test[:, 1], Y_Test.flatten(), "o", color="#3399ff", zorder=4.6, markersize=4, label="Test")
+
+                ax.set_title(Graph_title, color='#ffffff', fontsize=11, fontweight='bold')
+                ax.set_xlabel(Axes_titles[0] if len(Axes_titles) > 0 else "X1", color='#ffffff', fontsize=8)
+                ax.set_ylabel(Axes_titles[1] if len(Axes_titles) > 1 else "X2", color='#ffffff', fontsize=8)
+                ax.set_zlabel("A.F.", color='#ffffff', fontsize=8)
+                ax.tick_params(colors='#ffffff', labelsize=7)
+            else:
+                ax = fig.add_subplot(111)
+                ax.set_facecolor('#000000')
+                ax.set_title("GRAPH", color='#ffffff')
+                ax.set_xlabel("X", color='#ffffff')
+                ax.set_ylabel("Y", color='#ffffff')
+
+            fig.tight_layout()
+            img_b64 = fig_to_base64(fig)
+
+        result = {
+            "af_type": var_AF,
+            "max_af": round(max_AF_val, 4),
+            "next_point": [round(p, 3) for p in next_point],
+            "n_features": n_features,
+            "axes_titles": Axes_titles,
+            "graph_title": Graph_title,
+            "has_test": has_test,
+            "image": img_b64
+        }
+        if n_features == 1:
+            result.update({
+                "x_plot": BO_zone.flatten().tolist(),
+                "y_mean": Y_mean_flat.tolist(),
+                "af_plot": AF.tolist()
+            })
+        elif n_features == 2:
+            result.update({
+                "x1_plot": BO_zone[:, 0].tolist(),
+                "x2_plot": BO_zone[:, 1].tolist(),
+                "af_plot": AF.tolist()
+            })
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"AL/BO Error: {str(e)}")
 
 def build_session_variables(session_state: dict[str, Any]):
     def to_list(val):
