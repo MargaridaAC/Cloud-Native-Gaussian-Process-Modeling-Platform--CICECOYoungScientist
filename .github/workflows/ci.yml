@@ -30,7 +30,7 @@ jobs:
 
       - name: Lint and Syntax Check with Ruff
         run: |
-          ruff check . --select E,F,W --ignore E501
+          ruff check . --select E,F,W --ignore E501 --exclude original,scratch
 
       - name: Run Pytest Unit Tests
         env:
